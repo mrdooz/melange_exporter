@@ -10,6 +10,7 @@
 #include <c4d_ccurve.h>
 #include <c4d_ctrack.h>
 #include <stdio.h>
+#include <assert.h>
 
 //-----------------------------------------------------------------------------
 namespace _melange_
@@ -89,6 +90,15 @@ Bool AlienLayer::Execute()
 }
 
 //-----------------------------------------------------------------------------
+float* AddVector(float* f, const Vector& v)
+{
+  *f++ = v.x;
+  *f++ = v.y;
+  *f++ = v.z;
+  return f;
+}
+
+//-----------------------------------------------------------------------------
 Bool AlienPolygonObjectData::Execute()
 {
   Mesh* mesh = new Mesh(scene.meshes.size());
@@ -98,19 +108,21 @@ Bool AlienPolygonObjectData::Execute()
 
   // get point and polygon array pointer and counts
   const Vector* verts = obj->GetPointR();
-  u32 numVerts = obj->GetPointCount();
+  //u32 numVerts = obj->GetPointCount();
 
   const CPolygon* polys = obj->GetPolygonR();
   u32 numPolys = obj->GetPolygonCount();
-
   u32 numNGons = obj->GetNgonCount();
-  if (numNGons > 0)
+
+  // count # vertices. we create unique vertice per face.
+  u32 numVerts = 0;
+  for (u32 i = 0; i < numPolys; ++i)
   {
-    int a = 10;
+    numVerts += polys[i].c == polys[i].d ? 3 : 4;
   }
 
-  // currently not exporting normals
-  //const SVector* normals = obj->CreatePhongNormals();
+  // check if there are normals, tangents or UVW coordinates
+  NormalTag* normals = obj->GetTag(Tnormal) ? (NormalTag*)obj->GetTag(Tnormal) : nullptr;
 
   const char* nameCStr = obj->GetName().GetCStringCopy();
   mesh->name = nameCStr;
@@ -118,32 +130,47 @@ Bool AlienPolygonObjectData::Execute()
 
   // add verts
   mesh->verts.resize(numVerts*3);
-  for (u32 i = 0; i < numVerts; ++i) {
-    mesh->verts[i*3+0] = verts[i].x;
-    mesh->verts[i*3+1] = verts[i].y;
-    mesh->verts[i*3+2] = verts[i].z;
-  }
+  mesh->indices.reserve(3*numVerts);
 
-  // add faces
-  // tris are identified by the fact that their last two indices are the same
+  if (normals)
+    mesh->normals.resize(numVerts*3);
 
-  mesh->indices.reserve(3*2*numPolys);
-  for (u32 i = 0; i < numPolys; ++i) {
-    u32 a = polys[i].a;
-    u32 b = polys[i].b;
-    u32 c = polys[i].c;
-    u32 d = polys[i].d;
+  float* v = mesh->verts.data();
+  float* n = mesh->normals.data();
+  u32 vertOfs = 0;
+  for (u32 i = 0; i < numPolys; ++i)
+  {
+    v = AddVector(v, verts[polys[i].a]);
+    v = AddVector(v, verts[polys[i].b]);
+    v = AddVector(v, verts[polys[i].c]);
 
-    mesh->indices.push_back(a);
-    mesh->indices.push_back(c);
-    mesh->indices.push_back(b);
+    mesh->indices.push_back(vertOfs+0);
+    mesh->indices.push_back(vertOfs+1);
+    mesh->indices.push_back(vertOfs+2);
 
-    if (c != d)
-    {
-      mesh->indices.push_back(a);
-      mesh->indices.push_back(d);
-      mesh->indices.push_back(c);
+    bool quad = polys[i].c != polys[i].d;
+
+    if (normals) {
+      const NormalStruct& normal = normals->GetNormals(i);
+      n = AddVector(n, normal.a);
+      n = AddVector(n, normal.b);
+      n = AddVector(n, normal.c);
+
+      if (quad)
+       n = AddVector(n, normal.d);
     }
+
+    if (quad)
+    {
+      v = AddVector(v, verts[polys[i].d]);
+
+      mesh->indices.push_back(vertOfs+0);
+      mesh->indices.push_back(vertOfs+2);
+      mesh->indices.push_back(vertOfs+3);
+      vertOfs++;
+    }
+
+    vertOfs += 3;
   }
 
   scene.meshes.push_back(mesh);
@@ -185,8 +212,29 @@ int main(int argc, char** argv)
   BaseDocument C4Ddoc;
   HyperFile C4Dfile;
 
-  const char* name = "c:/temp/c4d/text1.c4d";
-  if (!C4Dfile.Open(DOC_IDENT, name, FILEOPEN_READ))
+  // old values: 
+  // in: c:/temp/c4d/text1.c4d
+  // out: d:/projects/boba/meshes/text1.boba
+
+  if (argc < 2) {
+    printf("No input file specified\n");
+    return 1;
+  }
+
+  string name = argv[1];
+  string outName(name + string(".boba"));
+
+  // create output file
+  if (argc > 2) {
+    outName = argv[2];
+  } else {
+    if (const char* dot = strchr(name.c_str(), '.')) {
+      int len = dot - name.c_str();
+      outName = name.substr(0, len) + ".boba";
+    }
+  }
+
+  if (!C4Dfile.Open(DOC_IDENT, name.c_str(), FILEOPEN_READ))
     return 1;
 
   if (!C4Ddoc.ReadObject(&C4Dfile, TRUE))
@@ -194,9 +242,6 @@ int main(int argc, char** argv)
 
   C4Dfile.Close();
   C4Ddoc.CreateSceneFromC4D();
-
-  string outName(name + string(".boba"));
-  outName = "d:/projects/boba/meshes/text1.boba";
   scene.Save(outName.c_str());
 
   return 0;
