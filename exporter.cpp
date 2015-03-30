@@ -90,7 +90,8 @@ Bool AlienLayer::Execute()
 }
 
 //-----------------------------------------------------------------------------
-float* AddVector(float* f, const Vector& v)
+template<typename T>
+float* AddVector(float* f, const T& v)
 {
   *f++ = v.x;
   *f++ = v.y;
@@ -121,8 +122,13 @@ Bool AlienPolygonObjectData::Execute()
     numVerts += polys[i].c == polys[i].d ? 3 : 4;
   }
 
-  // check if there are normals, tangents or UVW coordinates
-  NormalTag* normals = obj->GetTag(Tnormal) ? (NormalTag*)obj->GetTag(Tnormal) : nullptr;
+  // Check was kind of normals exist
+  bool hasNormalsTag = !!obj->GetTag(Tnormal);
+  bool hasPhongTag = !!obj->GetTag(Tphong);
+  bool hasNormals = hasNormalsTag || hasPhongTag;
+
+  SVector* phongNormals = hasPhongTag ? obj->CreatePhongNormals() : nullptr;
+  NormalTag* normals = hasNormalsTag ? (NormalTag*)obj->GetTag(Tnormal) : nullptr;
 
   const char* nameCStr = obj->GetName().GetCStringCopy();
   mesh->name = nameCStr;
@@ -132,7 +138,7 @@ Bool AlienPolygonObjectData::Execute()
   mesh->verts.resize(numVerts*3);
   mesh->indices.reserve(3*numVerts);
 
-  if (normals)
+  if (hasNormals)
     mesh->normals.resize(numVerts*3);
 
   float* v = mesh->verts.data();
@@ -140,29 +146,48 @@ Bool AlienPolygonObjectData::Execute()
   u32 vertOfs = 0;
   for (u32 i = 0; i < numPolys; ++i)
   {
-    v = AddVector(v, verts[polys[i].a]);
-    v = AddVector(v, verts[polys[i].b]);
-    v = AddVector(v, verts[polys[i].c]);
+    int idx0 = polys[i].a;
+    int idx1 = polys[i].b;
+    int idx2 = polys[i].c;
+    int idx3 = polys[i].d;
+
+    v = AddVector(v, verts[idx0]);
+    v = AddVector(v, verts[idx1]);
+    v = AddVector(v, verts[idx2]);
 
     mesh->indices.push_back(vertOfs+0);
     mesh->indices.push_back(vertOfs+1);
     mesh->indices.push_back(vertOfs+2);
 
-    bool quad = polys[i].c != polys[i].d;
+    bool isQuad = idx2 != idx3;
 
-    if (normals) {
-      const NormalStruct& normal = normals->GetNormals(i);
-      n = AddVector(n, normal.a);
-      n = AddVector(n, normal.b);
-      n = AddVector(n, normal.c);
+    if (hasNormals)
+    {
+      if (hasNormalsTag)
+      {
+        const NormalStruct& normal = normals->GetNormals(i);
+        n = AddVector(n, normal.a);
+        n = AddVector(n, normal.b);
+        n = AddVector(n, normal.c);
 
-      if (quad)
-       n = AddVector(n, normal.d);
+        if (isQuad)
+          n = AddVector(n, normal.d);
+      }
+      else if (hasPhongTag)
+      {
+        SVector* p = obj->CreatePhongNormals();
+        n = AddVector(n, p[idx0]);
+        n = AddVector(n, p[idx1]);
+        n = AddVector(n, p[idx2]);
+
+        if (isQuad)
+          n = AddVector(n, p[idx3]);
+      }
     }
 
-    if (quad)
+    if (isQuad)
     {
-      v = AddVector(v, verts[polys[i].d]);
+      v = AddVector(v, verts[idx3]);
 
       mesh->indices.push_back(vertOfs+0);
       mesh->indices.push_back(vertOfs+2);
