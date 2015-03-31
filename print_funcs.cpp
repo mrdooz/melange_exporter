@@ -26,7 +26,7 @@
 uint64_t tempmatid = 0;
 uint64_t tempLayID = 0;
 
-namespace _melange_
+namespace melange
 {
   void PrintUniqueIDs(BaseList2D *op);
   void PrintShaderInfo(BaseShader *shader, LONG depth = 0);
@@ -47,11 +47,11 @@ namespace _melange_
     LONG polycnt = op->GetPolygonCount();
 
     // get name of object as string copy (free it after usage!)
-    CHAR *pChar = op->GetName().GetCStringCopy();
+    char *pChar = op->GetName().GetCStringCopy();
     if (pChar)
     {
       printf("\n - AlienPolygonObjectData (%d): %s\n", (int)op->GetType(), pChar);
-      GeFree(pChar);
+      DeleteMem(pChar);
     }
     else
       printf("\n - AlienPolygonObjectData (%d): <noname>\n", (int)op->GetType());
@@ -117,7 +117,7 @@ namespace _melange_
     }
 
     // detect the assigned layer
-    AlienLayer *pLay = (AlienLayer*)op->GetLayer();
+    AlienLayer *pLay = (AlienLayer*)op->GetLayerObject();
     if (pLay)
     {
       layid=pLay->id;
@@ -125,7 +125,7 @@ namespace _melange_
       if (pChar)
       {
         printf("   - Layer (%d): %s\n", (int)pLay->GetType(), pChar);
-        GeFree(pChar);
+        DeleteMem(pChar);
       }
       else
         printf("   - Layer (%d): <noname>\n", (int)pLay->GetType());
@@ -137,11 +137,11 @@ namespace _melange_
 
   void AlienLayer::Print()
   {
-    CHAR *pChar = GetName().GetCStringCopy();
+    char *pChar = GetName().GetCStringCopy();
     if (pChar)
     {
       printf("\n - AlienLayer: \"%s\"", pChar);
-      GeFree(pChar);
+      DeleteMem(pChar);
     }
     else
       printf("\n - AlienLayer: <noname>");
@@ -150,16 +150,16 @@ namespace _melange_
     GeData data;
     Bool s, m, a, g, d, e, v, r, l;
     Vector c;
-    GetParameter(DescID(ID_LAYER_SOLO), data);				s = data.GetLong();
-    GetParameter(DescID(ID_LAYER_MANAGER), data);			m = data.GetLong();
-    GetParameter(DescID(ID_LAYER_ANIMATION), data);		a = data.GetLong();
-    GetParameter(DescID(ID_LAYER_GENERATORS), data);	g = data.GetLong();
-    GetParameter(DescID(ID_LAYER_DEFORMERS), data);		d = data.GetLong();
-    GetParameter(DescID(ID_LAYER_EXPRESSIONS), data);	e = data.GetLong();
-    GetParameter(DescID(ID_LAYER_VIEW), data);				v = data.GetLong();
-    GetParameter(DescID(ID_LAYER_RENDER), data);			r = data.GetLong();
-    GetParameter(DescID(ID_LAYER_LOCKED), data);			l = data.GetLong();
-    GetParameter(DescID(ID_LAYER_COLOR), data);				c = data.GetVector();
+    GetParameter(DescID(ID_LAYER_SOLO), data);				s = !!data.GetInt32();
+    GetParameter(DescID(ID_LAYER_MANAGER), data);			m = !!data.GetInt32();
+    GetParameter(DescID(ID_LAYER_ANIMATION), data);		a = !!data.GetInt32();
+    GetParameter(DescID(ID_LAYER_GENERATORS), data);	g = !!data.GetInt32();
+    GetParameter(DescID(ID_LAYER_DEFORMERS), data);		d = !!data.GetInt32();
+    GetParameter(DescID(ID_LAYER_EXPRESSIONS), data);	e = !!data.GetInt32();
+    GetParameter(DescID(ID_LAYER_VIEW), data);				v = !!data.GetInt32();
+    GetParameter(DescID(ID_LAYER_RENDER), data);			r = !!data.GetInt32();
+    GetParameter(DescID(ID_LAYER_LOCKED), data);			l = !!data.GetInt32();
+    GetParameter(DescID(ID_LAYER_COLOR), data);				c = !!data.GetVector();
     printf(" - S%d V%d R%d M%d L%d A%d G%d D%d E%d C%d/%d/%d\n", s, v, r, m, l, a, g, d, e, (int)(c.x*255.0), (int)(c.y*255.0), (int)(c.z*255.0));
 
     PrintUniqueIDs(this);
@@ -172,11 +172,11 @@ namespace _melange_
 
   void AlienMaterial::Print()
   {
-    CHAR *pChar = GetName().GetCStringCopy();
+    char *pChar = GetName().GetCStringCopy();
     if (pChar)
     {
       printf("\n - AlienMaterial (%d): %s\n", (int)GetType(), pChar);
-      GeFree(pChar);
+      DeleteMem(pChar);
     }
     else
       printf("\n - AlienMaterial (%d): <noname>\n", (int)GetType());
@@ -220,23 +220,23 @@ namespace _melange_
   void PrintUniqueIDs(BaseList2D *op)
   {
     // actual UIDs - size can be different from application to application
-    LONG t, i, cnt = op->GetUniqueIDCount();
+    Int32 t, i, cnt = op->GetUniqueIDCount();
     for (i=0; i<cnt; i++)
     {
-      LONG appid;
-      VLONG bytes;
-      const CHAR *mem;
+      Int32 appid;
+      Int bytes;
+      const char *mem;
       if (op->GetUniqueIDIndex(i, appid, mem, bytes))
       {
         if (!op->FindUniqueID(appid, mem, bytes))
         {
-          GeBoom();
+          CriticalStop();
           continue;
         }
         printf("   - UniqueID (%d Byte): ", (int)bytes);
         for (t=0; t<bytes; t++)
         {
-          printf("%2.2x", (UCHAR)mem[t]);
+          printf("%2.2x", (UChar)mem[t]);
         }
         printf(" [AppID: %d]", (int)appid);
         printf("\n");
@@ -246,17 +246,17 @@ namespace _melange_
     BaseContainer *bc = op->GetDataInstance();
 
     // Allplan related (deprecated)
-    CHAR *pChar = bc->GetString(AllplanElementID).GetCStringCopy();
+    char *pChar = bc->GetString(AllplanElementID).GetCStringCopy();
     if (pChar)
     {
       printf("   - Allplan ElementID: %s\n", pChar);
-      GeFree(pChar);
+      DeleteMem(pChar);
     }
     pChar = bc->GetString(AllplanAllrightID).GetCStringCopy();
     if (pChar)
     {
       printf("   - Allplan AllrightID: %s\n", pChar);
-      GeFree(pChar);
+      DeleteMem(pChar);
     }
 
     // ArchiCAD related (deprecated)
@@ -264,7 +264,7 @@ namespace _melange_
     if (pChar)
     {
       printf("   - ArchiCAD String ID: %s\n", pChar);
-      GeFree(pChar);
+      DeleteMem(pChar);
     }
   }
 
@@ -291,7 +291,7 @@ namespace _melange_
       if (pChar)
       {
         printf("   - %s \"%s\"", GetObjectTypeName(btag->GetType()), pChar);
-        GeFree(pChar);
+        DeleteMem(pChar);
       }
       else
       {
@@ -301,24 +301,24 @@ namespace _melange_
       // compositing tag
       if (btag->GetType() == Tcompositing)
       {
-        if (btag->GetParameter(COMPOSITINGTAG_MATTEOBJECT, data) && data.GetLong())
+        if (btag->GetParameter(COMPOSITINGTAG_MATTEOBJECT, data) && data.GetInt32())
         {
           if (btag->GetParameter(COMPOSITINGTAG_MATTECOLOR, data))
             printf("     + Matte - Color R %d G %d B %d", (int)(data.GetVector().x*255.0), (int)(data.GetVector().y*255.0), (int)(data.GetVector().z*255.0));
           else
             printf("     + Matte - Color NOCOLOR");
         }
-        if (btag->GetParameter(COMPOSITINGTAG_ENABLECHN4, data) && data.GetLong())
+        if (btag->GetParameter(COMPOSITINGTAG_ENABLECHN4, data) && data.GetInt32())
         {
           if (btag->GetParameter(COMPOSITINGTAG_IDCHN4, data))
-            printf("     + Objectbuffer Channel 5 enabled - ID = %d", (int)data.GetLong());
+            printf("     + Objectbuffer Channel 5 enabled - ID = %d", (int)data.GetInt32());
         }
       }
       // phong tag
       if (btag->GetType() == Tphong)
       {
         if (btag->GetParameter(PHONGTAG_PHONG_ANGLE, data))
-          printf(" - Phong Angle = %f", data.GetReal()*180.0/pi);
+          printf(" - Phong Angle = %f", data.GetFloat()*180.0/PI);
       }
 
       // archi grass tag
@@ -351,7 +351,7 @@ namespace _melange_
       {
         if (btag->GetParameter(VIBRATEEXPRESSION_RELATIVE, data))
         {
-          printf(" - Relative: %d", (int)data.GetLong());
+          printf(" - Relative: %d", (int)data.GetInt32());
         }
       }
 
@@ -362,7 +362,7 @@ namespace _melange_
         {
           pChar = data.GetString().GetCStringCopy();
           printf("     Code:\n---\n%s\n---\n", pChar);
-          GeFree(pChar);
+          DeleteMem(pChar);
         }
       }
 
@@ -373,13 +373,13 @@ namespace _melange_
         {
           pChar = data.GetString().GetCStringCopy();
           printf("     URL:  \"%s\"", pChar);
-          GeFree(pChar);
+          DeleteMem(pChar);
         }
         if (btag->GetParameter(WWWTAG_INFO, data))
         {
           pChar = data.GetString().GetCStringCopy();
           printf("     INFO: \"%s\"", pChar);
-          GeFree(pChar);
+          DeleteMem(pChar);
         }
       }
 
@@ -402,7 +402,7 @@ namespace _melange_
             {
               pChar = jOp->GetName().GetCStringCopy();
               printf("     Joint %d: \"%s\"\n", (int)j, pChar);
-              GeFree(pChar);
+              DeleteMem(pChar);
             }
             printf("     Joint Weight Count:  %d\n", (int)wt->GetWeightCount(j));
             if (obj->GetType() == Opolygon)
@@ -439,7 +439,7 @@ namespace _melange_
           if (pCharMat)
           {
             printf(" - material: \"%s\" (%d/%d/%d)", pCharMat, int(col.x*255), int(col.y*255), int(col.z*255));
-            GeFree(pCharMat);
+            DeleteMem(pCharMat);
           }
           else
             printf(" - material: <noname> (%d/%d/%d)", int(col.x*255), int(col.y*255), int(col.z*255));
@@ -451,7 +451,7 @@ namespace _melange_
             if (pCharSh)
             {
               printf(" - color shader \"%s\" - Type: %s", pCharSh, GetObjectTypeName(sh->GetType()));
-              GeFree(pCharSh);
+              DeleteMem(pCharSh);
             }
             else
               printf(" - color shader <noname> - Type: %s", GetObjectTypeName(sh->GetType()));
@@ -467,19 +467,22 @@ namespace _melange_
       if (btag->GetType() == Tnormal)
       {
         printf("\n");
-        LONG count = ((NormalTag*)btag)->GetNormalCount();
+        LONG count = ((NormalTag*)btag)->GetDataCount();
         const CPolygon *pAdr = NULL;
         if (obj->GetType() == Opolygon)
           pAdr = ((PolygonObject*)obj)->GetPolygonR();
         // print normals of 2 polys
         for (LONG n=0; n<count && n<2; n++)
         {
+          // MAGNUS: broken
+/*
           NormalStruct pNormals = ((NormalTag*)btag)->GetNormals(n);
           printf("     Na %d: %.6f / %.6f / %.6f\n", (int)n, pNormals.a.x, pNormals.a.y, pNormals.a.z);
           printf("     Nb %d: %.6f / %.6f / %.6f\n", (int)n, pNormals.b.x, pNormals.b.y, pNormals.b.z);
           printf("     Nc %d: %.6f / %.6f / %.6f\n", (int)n, pNormals.c.x, pNormals.c.y, pNormals.c.z);
           if (!pAdr || pAdr[n].c != pAdr[n].d)
             printf("     Nd %d: %.6f / %.6f / %.6f\n", (int)n, pNormals.d.x, pNormals.d.y, pNormals.d.z);
+*/
         }
       }
 
@@ -575,17 +578,17 @@ namespace _melange_
       {
         if (sh->GetType() == Xbitmap)
         {
-          CHAR *pCharShader =  sh->GetFileName().GetString().GetCStringCopy();
+          char *pCharShader =  sh->GetFileName().GetString().GetCStringCopy();
           if (pCharShader)
           {
             printf("Shader - %s (%d) : %s\n", GetObjectTypeName(sh->GetType()), (int)sh->GetType(), pCharShader);
-            GeFree(pCharShader);
+            DeleteMem(pCharShader);
             pCharShader =  sh->GetFileName().GetFileString().GetCStringCopy();
             if (pCharShader)
             {
               for (LONG s=0; s<depth; s++) printf(" ");
               printf("texture name only: \"%s\"\n", pCharShader);
-              GeFree(pCharShader);
+              DeleteMem(pCharShader);
             }
           }
           else
@@ -633,7 +636,7 @@ namespace _melange_
     // renderer
     if (rdata->GetParameter(RDATA_RENDERENGINE, data))
     {
-      switch (data.GetLong())
+      switch (data.GetInt32())
       {
         case RDATA_RENDERENGINE_PREVIEWSOFTWARE:
           printf(" - Renderengine - PREVIEWSOFTWARE\n");
@@ -653,18 +656,18 @@ namespace _melange_
     }
 
     // save option on/off ?
-    if (rdata->GetParameter(RDATA_GLOBALSAVE, data) && data.GetLong())
+    if (rdata->GetParameter(RDATA_GLOBALSAVE, data) && data.GetInt32())
     {
       printf(" - Global Save - ENABLED\n");
-      if (rdata->GetParameter(RDATA_SAVEIMAGE, data) && data.GetLong())
+      if (rdata->GetParameter(RDATA_SAVEIMAGE, data) && data.GetInt32())
       {
         if (rdata->GetParameter(RDATA_PATH, data))
         {
-          CHAR *pChar = data.GetFilename().GetString().GetCStringCopy();
+          char *pChar = data.GetFilename().GetString().GetCStringCopy();
           if (pChar)
           {
             printf("   + Save Image - %s\n", pChar);
-            GeFree(pChar);
+            DeleteMem(pChar);
           }
           else
             printf("   + Save Image\n");
@@ -673,33 +676,33 @@ namespace _melange_
           printf("   + Save Image\n");
       }
       // save options: alpha, straight alpha, separate alpha, dithering, sound
-      if (rdata->GetParameter(RDATA_ALPHACHANNEL, data) && data.GetLong())
+      if (rdata->GetParameter(RDATA_ALPHACHANNEL, data) && data.GetInt32())
         printf("   + Alpha Channel\n");
-      if (rdata->GetParameter(RDATA_STRAIGHTALPHA, data) && data.GetLong())
+      if (rdata->GetParameter(RDATA_STRAIGHTALPHA, data) && data.GetInt32())
         printf("   + Straight Alpha\n");
-      if (rdata->GetParameter(RDATA_SEPARATEALPHA, data) && data.GetLong())
+      if (rdata->GetParameter(RDATA_SEPARATEALPHA, data) && data.GetInt32())
         printf("   + Separate Alpha\n");
-      if (rdata->GetParameter(RDATA_TRUECOLORDITHERING, data) && data.GetLong())
+      if (rdata->GetParameter(RDATA_TRUECOLORDITHERING, data) && data.GetInt32())
         printf("   + 24 Bit Dithering\n");
-      if (rdata->GetParameter(RDATA_INCLUDESOUND, data) && data.GetLong())
+      if (rdata->GetParameter(RDATA_INCLUDESOUND, data) && data.GetInt32())
         printf("   + Include Sound\n");
     }
     else
       printf(" - Global Save = FALSE\n");
 
     // multi pass enabled ?
-    if (rdata->GetParameter(RDATA_MULTIPASS_ENABLE, data) && data.GetLong())
+    if (rdata->GetParameter(RDATA_MULTIPASS_ENABLE, data) && data.GetInt32())
     {
       printf(" - Multi pass - ENABLED\n");
-      if (rdata->GetParameter(RDATA_MULTIPASS_SAVEIMAGE, data) && data.GetLong())
+      if (rdata->GetParameter(RDATA_MULTIPASS_SAVEIMAGE, data) && data.GetInt32())
       {
         if (rdata->GetParameter(RDATA_MULTIPASS_FILENAME, data))
         {
-          CHAR *pChar = data.GetFilename().GetString().GetCStringCopy();
+          char *pChar = data.GetFilename().GetString().GetCStringCopy();
           if (pChar)
           {
             printf("   + Save Multi pass Image - %s\n", pChar);
-            GeFree(pChar);
+            DeleteMem(pChar);
           }
           else
             printf("   + Save Multi pass Image\n");
@@ -708,7 +711,7 @@ namespace _melange_
           printf("   + Save Multi pass Image\n");
       }
 
-      if (rdata->GetParameter(RDATA_MULTIPASS_STRAIGHTALPHA, data) && data.GetLong())
+      if (rdata->GetParameter(RDATA_MULTIPASS_STRAIGHTALPHA, data) && data.GetInt32())
         printf("   + Multi pass Straight Alpha\n");
       MultipassObject *mobj = rdata->GetFirstMultipass();
       GeData data;
@@ -718,11 +721,11 @@ namespace _melange_
         {
           if (mobj->GetParameter(MULTIPASSOBJECT_TYPE, data))
           {
-            printf("   + Multi pass Channel: %d", (int)data.GetLong());
-            if (data.GetLong() == VPBUFFER_OBJECTBUFFER)
+            printf("   + Multi pass Channel: %d", (int)data.GetInt32());
+            if (data.GetInt32() == VPBUFFER_OBJECTBUFFER)
             {
               if (mobj->GetParameter(MULTIPASSOBJECT_OBJECTBUFFER, data))
-                printf(" Group ID %d", (int)data.GetLong());
+                printf(" Group ID %d", (int)data.GetInt32());
             }
 
             printf("\n");
@@ -745,52 +748,52 @@ namespace _melange_
         case VPambientocclusion:
           printf("Ambient Occlusion");
           if (vp->GetParameter(VPAMBIENTOCCLUSION_ACCURACY, data) && data.GetType() == DA_REAL)
-            printf(" (Accuracy = %f)", (100.0 * data.GetReal()));
+            printf(" (Accuracy = %f)", (100.0 * data.GetFloat()));
           break;
         case VPcelrender:
           printf("Celrender");
           if (vp->GetParameter(VP_COMICOUTLINE, data) && data.GetType() == DA_LONG)
-            printf(" (Outline = %s)", data.GetLong() ? "TRUE" : "FALSE");
+            printf(" (Outline = %s)", data.GetInt32() ? "TRUE" : "FALSE");
           break;
         case VPcolorcorrection:
           printf("Colorcorrection");
           if (vp->GetParameter(ID_PV_FILTER_CONTRAST, data) && data.GetType() == DA_REAL)
-            printf(" (Contrast = %f)", (100.0 * data.GetReal()));
+            printf(" (Contrast = %f)", (100.0 * data.GetFloat()));
           break;
         case VPcolormapping:
           printf("Colormapping");
           if (vp->GetParameter(COLORMAPPING_BACKGROUND, data) && data.GetType() == DA_LONG)
-            printf(" (Affect Background = %s)", data.GetLong() ? "TRUE" : "FALSE");
+            printf(" (Affect Background = %s)", data.GetInt32() ? "TRUE" : "FALSE");
           break;
         case VPcylindricallens:
           printf("Cylindrical Lens");
           if (vp->GetParameter(CYLINDERLENS_VERTICALSIZE, data) && data.GetType() == DA_REAL)
-            printf(" (Vertical Size = %f)", data.GetReal());
+            printf(" (Vertical Size = %f)", data.GetFloat());
           break;
         case VPdepthoffield:
           printf("Depth of Field");
           if (vp->GetParameter(DB_DBLUR, data) && data.GetType() == DA_REAL)
-            printf(" (Distance Blur = %f)", 100*data.GetReal());
+            printf(" (Distance Blur = %f)", 100*data.GetFloat());
           break;
         case VPglobalillumination:
           printf("Global Illumination");
           if (vp->GetParameter(GI_SETUP_DATA_EXTRA_REFLECTIVECAUSTICS, data) && data.GetType() == DA_LONG)
-            printf(" (Reflective Caustics = %s)", data.GetLong() ? "TRUE" : "FALSE");
+            printf(" (Reflective Caustics = %s)", data.GetInt32() ? "TRUE" : "FALSE");
           break;
         case VPglow:
           printf("Glow");
           if (vp->GetParameter(GW_LUM, data) && data.GetType() == DA_REAL)
-            printf(" (Luminosity = %f)", 100*data.GetReal());
+            printf(" (Luminosity = %f)", 100*data.GetFloat());
           break;
         case VPhair:
           printf("Hair");
           if (vp->GetParameter(HAIR_RENDER_SHADOW_DIST_ACCURACY, data) && data.GetType() == DA_REAL)
-            printf(" (Depth Threshold = %f)", 100*data.GetReal());
+            printf(" (Depth Threshold = %f)", 100*data.GetFloat());
           break;
         case VPhighlights:
           printf("Highlights");
           if (vp->GetParameter(HLIGHT_SIZE, data) && data.GetType() == DA_REAL)
-            printf(" (Flare Size = %f)", 100*data.GetReal());
+            printf(" (Flare Size = %f)", 100*data.GetFloat());
           break;
         case VPlenseffects:
           printf("Lenseffects");
@@ -798,7 +801,7 @@ namespace _melange_
         case VPmedianfilter:
           printf("Medianfilter");
           if (vp->GetParameter(VP_MEDIANFILTERSTRENGTH, data) && data.GetType() == DA_REAL)
-            printf(" (Strength = %f)", 100*data.GetReal());
+            printf(" (Strength = %f)", 100*data.GetFloat());
           break;
         case VPobjectglow:
           printf("Objectglow");
@@ -806,42 +809,42 @@ namespace _melange_
         case VPobjectmotionblur:
           printf("Objectmotionblur");
           if (vp->GetParameter(VP_OMBSTRENGTH, data) && data.GetType() == DA_REAL)
-            printf(" (Strength = %f)", 100*data.GetReal());
+            printf(" (Strength = %f)", 100*data.GetFloat());
           break;
         case VPsharpenfilter:
           printf("Sharpenfilter");
           if (vp->GetParameter(VP_SHARPENFILTERSTRENGTH, data) && data.GetType() == DA_REAL)
-            printf(" (Strength = %f)", 100*data.GetReal());
+            printf(" (Strength = %f)", 100*data.GetFloat());
           break;
         case VPscenemotionblur:
           printf("Scenemotionblur");
           if (vp->GetParameter(VP_SMBDITHER, data) && data.GetType() == DA_REAL)
-            printf(" (Dithering = %f)", 100*data.GetReal());
+            printf(" (Dithering = %f)", 100*data.GetFloat());
           vp->SetParameter(VP_SMBDITHER, 12.3*0.01); // set test
           break;
         case VPremote:
           printf("Remote");
           if (vp->GetParameter(VP_REMOTEPATH, data) && data.GetType() == DA_FILENAME)
           {
-            CHAR *tmp = data.GetFilename().GetString().GetCStringCopy();
+            char *tmp = data.GetFilename().GetString().GetCStringCopy();
             printf(" (Ext. Appl. = \'%s\')", tmp);
-            GeFree(tmp);
+            DeleteMem(tmp);
           }
           break;
         case VPsketch:
           printf("Sketch & Toon");
           if (vp->GetParameter(OUTLINEMAT_LINE_INTERSECTION, data) && data.GetType() == DA_LONG)
-            printf(" (Intersections = %s)", data.GetLong() ? "TRUE" : "FALSE");
+            printf(" (Intersections = %s)", data.GetInt32() ? "TRUE" : "FALSE");
           break;
         case VPsoftenfilter:
           printf("Softenfilter");
           if (vp->GetParameter(VP_SOFTFILTERSTRENGTH, data) && data.GetType() == DA_REAL)
-            printf(" (Strength = %f)", 100*data.GetReal());
+            printf(" (Strength = %f)", 100*data.GetFloat());
           break;
         case VPvectormotionblur:
           printf("Vectormotionblur");
           if (vp->GetParameter(MBLUR_SAMPLES, data) && data.GetType() == DA_LONG)
-            printf(" (Samples = %d)", (int)data.GetLong());
+            printf(" (Samples = %d)", (int)data.GetInt32());
           break;
       }
       printf("\n");
@@ -865,11 +868,11 @@ namespace _melange_
     while (ct)
     {
       // CTrack name
-      CHAR *pChar = ct->GetName().GetCStringCopy();
+      char *pChar = ct->GetName().GetCStringCopy();
       if (pChar)
       {
         printf("\n   %d. CTrack \"%s\"!\n", (int)++tn, pChar);
-        GeFree(pChar);
+        DeleteMem(pChar);
       }
       else
         printf("\n   %d. CTrack !\n", (int)++tn);
@@ -952,11 +955,11 @@ namespace _melange_
 
             // bias
             if (ck->GetParameter(CK_PLA_BIAS, ptData) && ptData.GetType() == DA_REAL)
-              printf("Bias = %.2f - ", ptData.GetReal());
+              printf("Bias = %.2f - ", ptData.GetFloat());
 
             // smooth
             if (ck->GetParameter(CK_PLA_CUBIC, ptData) && ptData.GetType() == DA_LONG)
-              printf("Smooth = %d - ", (int)ptData.GetLong());
+              printf("Smooth = %d - ", (int)ptData.GetInt32());
 
             // pla data
             if (ck->GetParameter(CK_PLA_DATA, ptData))
@@ -984,11 +987,11 @@ namespace _melange_
 
             // bias
             if (ck->GetParameter(CK_MORPH_BIAS, mtData) && mtData.GetType() == DA_REAL)
-              printf("Bias = %.2f - ", mtData.GetReal());
+              printf("Bias = %.2f - ", mtData.GetFloat());
 
             // smooth
             if (ck->GetParameter(CK_MORPH_CUBIC, mtData) && mtData.GetType() == DA_LONG)
-              printf("Smooth = %d - ", (int)mtData.GetLong());
+              printf("Smooth = %d - ", (int)mtData.GetInt32());
 
             // link to target object
             if (ck->GetParameter(CK_MORPH_LINK, mtData))
@@ -996,11 +999,11 @@ namespace _melange_
               BaseObject *targetObject = (BaseObject*)mtData.GetLink();
               if (targetObject)
               {
-                CHAR *pTargetChar = targetObject->GetName().GetCStringCopy();
+                char *pTargetChar = targetObject->GetName().GetCStringCopy();
                 if (pTargetChar)
                 {
                   printf("Target Object = %s", pTargetChar);
-                  GeFree(pTargetChar);
+                  DeleteMem(pTargetChar);
                 }
                 else
                   printf("no target object name");
@@ -1024,7 +1027,7 @@ namespace _melange_
   {
     printf("   - Matrix:");
     LONG size = 6;
-    Real f = m.v1.x;
+    Float f = m.v1.x;
     if (f==0.0)f=0.0;
     if (f<0.0)size--; if (f>=10.0||f<=-10.0)size--; if (f>=100.0||f<=-100.0)size--; if (f>=1000.0||f<=-1000.0)size--; if (f>=10000.0||f<=-10000.0)size--;
     for (LONG s=0; s<size; s++) printf(" ");

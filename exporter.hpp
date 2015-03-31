@@ -4,9 +4,8 @@
 #include <c4d_ccurve.h>
 #include <c4d_ctrack.h>
 
-namespace _melange_
+namespace melange
 {
-
   class AlienMaterial : public Material
   {
     INSTANCEOF(AlienMaterial, Material)
@@ -46,8 +45,5 @@ namespace _melange_
 
     virtual Bool Execute();
     void Print();
-
   };
-
-
 }

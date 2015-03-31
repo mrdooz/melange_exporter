@@ -4,6 +4,7 @@
 //-----------------------------------------------------------------------------
 
 #include "exporter.hpp"
+#include "exporter_helpers.hpp"
 #include "boba_io.hpp"
 
 #include <c4d_file.h>
@@ -11,82 +12,44 @@
 #include <c4d_ctrack.h>
 #include <stdio.h>
 #include <assert.h>
+#include <set>
+#include <map>
 
 //-----------------------------------------------------------------------------
-namespace _melange_
-{
-  // memory allocation functions inside _melange_ namespace (if you have your own memory management you can overload these functions)
-  // alloc memory no clear
-  void *MemAllocNC(VLONG size)
-  {
-    void *mem = malloc(size);
-    return mem;
-  }
-
-  // alloc memory set to 0
-  void *MemAlloc(VLONG size)
-  {
-    void *mem = MemAllocNC(size);
-    memset(mem, 0, size);
-    return mem;
-  }
-
-  // realloc existing memory
-  void *MemRealloc(void* orimem, VLONG size)
-  {
-    void *mem = realloc(orimem, size);
-    return mem;
-  }
-
-  // free memory and set pointer to null
-  void MemFree(void *&mem)
-  {
-    if (!mem)
-      return;
-
-    free(mem);
-    mem = NULL;
-  }
-}
-
-using namespace _melange_;
+using namespace melange;
 using namespace boba;
 
-// overload this function and fill in your own unique data
-void GetWriterInfo(LONG &id, String &appname)
+struct Options
 {
-  // register your own pluginid once for your exporter and enter it here under id
-  // this id must be used for your own unique ids
-  // 	Bool AddUniqueID(LONG appid, const CHAR *const mem, LONG bytes);
-  // 	Bool FindUniqueID(LONG appid, const CHAR *&mem, LONG &bytes) const;
-  // 	Bool GetUniqueIDIndex(LONG idx, LONG &id, const CHAR *&mem, LONG &bytes) const;
-  // 	LONG GetUniqueIDCount() const;
-  id = 0;
-  appname = "Commandline Example";
-}
+  string inputFilename;
+  string outputFilename;
+  bool makeFaceted = false;
+  int verbosity = 0;
+};
 
 Scene scene;
+Options options;
 
 //-----------------------------------------------------------------------------
-RootMaterial *AllocAlienRootMaterial()			{ return gNew RootMaterial; }
-RootObject *AllocAlienRootObject()					{ return gNew RootObject; }
-RootLayer *AllocAlienRootLayer()						{ return gNew RootLayer; }
-RootRenderData *AllocAlienRootRenderData()	{ return gNew RootRenderData; }
-RootViewPanel *AllocC4DRootViewPanel()			{ return gNew RootViewPanel; }
-LayerObject *AllocAlienLayer()							{ return gNew LayerObject; }
+RootMaterial *AllocAlienRootMaterial()			{ return NewObj(RootMaterial); }
+RootObject *AllocAlienRootObject()					{ return NewObj(RootObject); }
+RootLayer *AllocAlienRootLayer()						{ return NewObj(RootLayer); }
+RootRenderData *AllocAlienRootRenderData()	{ return NewObj(RootRenderData); }
+RootViewPanel *AllocC4DRootViewPanel()			{ return NewObj(RootViewPanel); }
+LayerObject *AllocAlienLayer()							{ return NewObj(LayerObject); }
 
 //-----------------------------------------------------------------------------
 Bool AlienMaterial::Execute()
 {
   Print();
-  return TRUE;
+  return true;
 }
 
 //-----------------------------------------------------------------------------
 Bool AlienLayer::Execute()
 {
   Print();
-  return TRUE;
+  return true;
 }
 
 //-----------------------------------------------------------------------------
@@ -102,7 +65,7 @@ float* AddVector(float* f, const T& v)
 //-----------------------------------------------------------------------------
 Bool AlienPolygonObjectData::Execute()
 {
-  Mesh* mesh = new Mesh(scene.meshes.size());
+  Mesh* mesh = new Mesh((u32)scene.meshes.size());
 
   // get object pointer
   PolygonObject* obj = (PolygonObject*)GetNode();
@@ -116,30 +79,35 @@ Bool AlienPolygonObjectData::Execute()
   u32 numNGons = obj->GetNgonCount();
 
   // count # vertices. we create unique vertice per face.
+  // TODO: make this a flag
+  // NOTE: ok, this isn't really true. we create unique vertices per polygon, and
+  // if we triangulate, we're sharing
   u32 numVerts = 0;
   for (u32 i = 0; i < numPolys; ++i)
-  {
     numVerts += polys[i].c == polys[i].d ? 3 : 4;
-  }
 
-  // Check was kind of normals exist
+  // Check what kind of normals exist
   bool hasNormalsTag = !!obj->GetTag(Tnormal);
   bool hasPhongTag = !!obj->GetTag(Tphong);
   bool hasNormals = hasNormalsTag || hasPhongTag;
 
-  SVector* phongNormals = hasPhongTag ? obj->CreatePhongNormals() : nullptr;
+  Vector32* phongNormals = hasPhongTag ? obj->CreatePhongNormals() : nullptr;
   NormalTag* normals = hasNormalsTag ? (NormalTag*)obj->GetTag(Tnormal) : nullptr;
 
   const char* nameCStr = obj->GetName().GetCStringCopy();
   mesh->name = nameCStr;
-  GeFree(nameCStr);
+  DeleteMem(nameCStr);
+
+  map<pair<Vector32, Vector32>, int> vv;  
 
   // add verts
   mesh->verts.resize(numVerts*3);
-  mesh->indices.reserve(3*numVerts);
+  mesh->indices.reserve(numVerts*3);
 
   if (hasNormals)
     mesh->normals.resize(numVerts*3);
+
+  ConstNormalHandle normalHandle = normals ? normals->GetDataAddressR() : nullptr;
 
   float* v = mesh->verts.data();
   float* n = mesh->normals.data();
@@ -165,7 +133,8 @@ Bool AlienPolygonObjectData::Execute()
     {
       if (hasNormalsTag)
       {
-        const NormalStruct& normal = normals->GetNormals(i);
+        NormalStruct normal;
+        normals->Get(normalHandle, i, normal);
         n = AddVector(n, normal.a);
         n = AddVector(n, normal.b);
         n = AddVector(n, normal.c);
@@ -175,13 +144,12 @@ Bool AlienPolygonObjectData::Execute()
       }
       else if (hasPhongTag)
       {
-        SVector* p = obj->CreatePhongNormals();
-        n = AddVector(n, p[idx0]);
-        n = AddVector(n, p[idx1]);
-        n = AddVector(n, p[idx2]);
+        n = AddVector(n, phongNormals[idx0]);
+        n = AddVector(n, phongNormals[idx1]);
+        n = AddVector(n, phongNormals[idx2]);
 
         if (isQuad)
-          n = AddVector(n, p[idx3]);
+          n = AddVector(n, phongNormals[idx3]);
       }
     }
 
@@ -200,74 +168,143 @@ Bool AlienPolygonObjectData::Execute()
 
   scene.meshes.push_back(mesh);
   //Print();
-  return TRUE;
+  return true;
 }
 
 //-----------------------------------------------------------------------------
-NodeData *AllocAlienObjectData(LONG id, Bool &known)
+NodeData *AllocAlienObjectData(Int32 id, Bool &known)
 {
   NodeData *m_data = NULL;
-  known = TRUE;
+  known = true;
   switch (id)
   {
     // supported element types
-    case Opolygon:        m_data = gNew AlienPolygonObjectData; break;
-    default:              known = FALSE; break;
+    case Opolygon:        m_data = NewObj(AlienPolygonObjectData); break;
+    default:              known = false; break;
   }
 
   return m_data;
 }
 
 // allocate the plugin tag elements data (only few tags have additional data which is stored in a NodeData)
-NodeData *AllocAlienTagData(LONG id, Bool &known)
+NodeData *AllocAlienTagData(Int32 id, Bool &known)
 {
   return 0;
 }
 
 
+//-----------------------------------------------------------------------------
 // create objects, material and layers for the new C4D scene file
 Bool BaseDocument::CreateSceneToC4D(Bool selectedonly)
 {
-  return TRUE;
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+class AlienBaseDocument : public BaseDocument
+{
+public:
+  virtual Bool Execute() 
+  { 
+    return true; 
+  }
+};
+
+//-----------------------------------------------------------------------------
+int ParseOptions(int argc, char** argv)
+{
+  // format is [--faceted] [--verbose N] input [output]
+
+  if (argc < 2)
+  {
+    printf("No input file specified\n");
+    return 1;
+  }
+
+  int inputArg = 1;
+  int curArg = 1;
+  int remaining = argc - 1;
+
+  auto step = [&curArg, &remaining](int steps) { curArg += steps; remaining -= steps; };
+
+  while (remaining)
+  {
+    if (strcmp(argv[curArg], "--faceted") == 0)
+    {
+      options.makeFaceted = true;
+      step(1);
+    }
+    else if (strcmp(argv[curArg], "--verbose") == 0)
+    {
+      // we need at least 1 more argument, for the level
+      if (remaining < 2)
+      {
+        printf("Invalid args\n");
+        return 1;
+      }
+      options.verbosity = atoi(argv[curArg+1]);
+      step(2);
+    }
+    else
+    {
+      // Unknown arg, so break, and use this as the filename
+      break;
+    }
+  }
+
+  if (remaining < 1)
+  {
+    printf("Invalid args\n");
+    return 1;
+  }
+
+  options.inputFilename = argv[curArg];
+  step(1);
+
+  // create output file
+  if (remaining > 1)
+  {
+    options.outputFilename = argv[curArg];
+  }
+  else
+  {
+    if (const char* dot = strchr(options.inputFilename.c_str(), '.'))
+    {
+      int len = dot - options.inputFilename.c_str();
+      options.outputFilename = options.inputFilename.substr(0, len) + ".boba";
+    }
+    else
+    {
+      printf("Invalid input filename given: %s\n", options.inputFilename.c_str());
+      return 1;
+    }
+  }
+
+  return 0;
 }
 
 //-----------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
-  BaseDocument C4Ddoc;
-  HyperFile C4Dfile;
+  if (int res = ParseOptions(argc, argv))
+    return res;
 
-  // old values: 
-  // in: c:/temp/c4d/text1.c4d
-  // out: d:/projects/boba/meshes/text1.boba
+  AlienBaseDocument *C4Ddoc = NewObj(AlienBaseDocument);
+  HyperFile *C4Dfile = NewObj(HyperFile);
 
-  if (argc < 2) {
-    printf("No input file specified\n");
-    return 1;
-  }
-
-  string name = argv[1];
-  string outName(name + string(".boba"));
-
-  // create output file
-  if (argc > 2) {
-    outName = argv[2];
-  } else {
-    if (const char* dot = strchr(name.c_str(), '.')) {
-      int len = dot - name.c_str();
-      outName = name.substr(0, len) + ".boba";
-    }
-  }
-
-  if (!C4Dfile.Open(DOC_IDENT, name.c_str(), FILEOPEN_READ))
+  if (!C4Dfile->Open(DOC_IDENT, options.inputFilename.c_str(), FILEOPEN_READ))
     return 1;
 
-  if (!C4Ddoc.ReadObject(&C4Dfile, TRUE))
+  if (!C4Ddoc->ReadObject(C4Dfile, true))
     return 1;
 
-  C4Dfile.Close();
-  C4Ddoc.CreateSceneFromC4D();
-  scene.Save(outName.c_str());
+  C4Dfile->Close();
+
+  C4Ddoc->CreateSceneFromC4D();
+  scene.Save(options.outputFilename.c_str());
+
+  DeleteObj(C4Ddoc);
+  DeleteObj(C4Dfile);
 
   return 0;
 }
