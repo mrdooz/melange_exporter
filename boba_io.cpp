@@ -36,6 +36,7 @@ namespace boba
 
     bool Open(const char *filename)
     {
+#pragma warning(suppress: 4996)
       if (!(_f = fopen(filename, "wb")))
         return false;
       return true;
@@ -65,7 +66,7 @@ namespace boba
 
     void AddDeferredString(const std::string &str)
     {
-      _deferredData.push_back(DeferredData(GetFilePos(), str.data(), str.size() + 1, false));
+      _deferredData.push_back(DeferredData(GetFilePos(), str.data(), (u32)str.size() + 1, false));
       // dummy write, will be filled in later with the position of the actual deferred data
       WritePtr(0);
     }
@@ -80,7 +81,7 @@ namespace boba
     void AddDeferredVector(const vector<T>& v)
     {
       // todo: writing the length should probably be exposed as part of the API
-      _deferredData.push_back(DeferredData(GetFilePos(), v.data(), v.size() * sizeof(T), false));
+      _deferredData.push_back(DeferredData(GetFilePos(), v.data(), (u32)v.size() * sizeof(T), false));
       WritePtr(0);
     }
 
@@ -191,13 +192,14 @@ namespace boba
       // add # meshes
       writer.Write((u32)meshes.size());
 
-      u32 numMeshes = meshes.size();
+      u32 numMeshes = (u32)meshes.size();
 
       // dummy write the meshes, to make sure the elements are in a contiguous block
       for (const Mesh* mesh : meshes)
       {
         writer.AddDeferredString(mesh->name);
-        writer.Write((u32)mesh->verts.size());
+        // Note, divide by 3 here to write # verts, and not # floats
+        writer.Write((u32)mesh->verts.size() / 3);
         writer.Write((u32)mesh->indices.size());
         writer.AddDeferredVector(mesh->verts);
         if (mesh->normals.empty())

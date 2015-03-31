@@ -78,13 +78,15 @@ Bool AlienPolygonObjectData::Execute()
   u32 numPolys = obj->GetPolygonCount();
   u32 numNGons = obj->GetNgonCount();
 
-  // count # vertices. we create unique vertice per face.
-  // TODO: make this a flag
-  // NOTE: ok, this isn't really true. we create unique vertices per polygon, and
-  // if we triangulate, we're sharing
   u32 numVerts = 0;
   for (u32 i = 0; i < numPolys; ++i)
-    numVerts += polys[i].c == polys[i].d ? 3 : 4;
+  {
+    // if the polygon is a quad, we're going to double the shared verts
+    if (polys[i].c == polys[i].d)
+      numVerts += 3;
+    else
+      numVerts += options.makeFaceted ? 2*3 : 4;
+  }
 
   // Check what kind of normals exist
   bool hasNormalsTag = !!obj->GetTag(Tnormal);
@@ -112,13 +114,16 @@ Bool AlienPolygonObjectData::Execute()
   float* v = mesh->verts.data();
   float* n = mesh->normals.data();
   u32 vertOfs = 0;
+
   for (u32 i = 0; i < numPolys; ++i)
   {
     int idx0 = polys[i].a;
     int idx1 = polys[i].b;
     int idx2 = polys[i].c;
     int idx3 = polys[i].d;
+    bool isQuad = idx2 != idx3;
 
+    // face 0, 1, 2
     v = AddVector(v, verts[idx0]);
     v = AddVector(v, verts[idx1]);
     v = AddVector(v, verts[idx2]);
@@ -127,7 +132,31 @@ Bool AlienPolygonObjectData::Execute()
     mesh->indices.push_back(vertOfs+1);
     mesh->indices.push_back(vertOfs+2);
 
-    bool isQuad = idx2 != idx3;
+    if (isQuad)
+    {
+      // face 0, 2, 3
+      if (options.makeFaceted)
+      {
+        // if making a faceted mesh, duplicate the shared vertices
+        v = AddVector(v, verts[idx0]);
+        v = AddVector(v, verts[idx2]);
+        v = AddVector(v, verts[idx3]);
+
+        mesh->indices.push_back(vertOfs+3+0);
+        mesh->indices.push_back(vertOfs+3+1);
+        mesh->indices.push_back(vertOfs+3+2);
+        vertOfs += 6;
+      }
+      else
+      {
+        v = AddVector(v, verts[idx3]);
+
+        mesh->indices.push_back(vertOfs+0);
+        mesh->indices.push_back(vertOfs+2);
+        mesh->indices.push_back(vertOfs+3);
+        vertOfs += 4;
+      }
+    }
 
     if (hasNormals)
     {
@@ -140,34 +169,46 @@ Bool AlienPolygonObjectData::Execute()
         n = AddVector(n, normal.c);
 
         if (isQuad)
-          n = AddVector(n, normal.d);
+        {
+          if (options.makeFaceted)
+          {
+            n = AddVector(n, normal.a);
+            n = AddVector(n, normal.c);
+            n = AddVector(n, normal.d);
+          }
+          else
+          {
+            n = AddVector(n, normal.d);
+          }
+        }
       }
       else if (hasPhongTag)
       {
-        n = AddVector(n, phongNormals[idx0]);
-        n = AddVector(n, phongNormals[idx1]);
-        n = AddVector(n, phongNormals[idx2]);
+        n = AddVector(n, phongNormals[i*4+0]);
+        n = AddVector(n, phongNormals[i*4+1]);
+        n = AddVector(n, phongNormals[i*4+2]);
 
         if (isQuad)
-          n = AddVector(n, phongNormals[idx3]);
+        {
+          if (options.makeFaceted)
+          {
+            n = AddVector(n, phongNormals[i*4+0]);
+            n = AddVector(n, phongNormals[i*4+2]);
+            n = AddVector(n, phongNormals[i*4+3]);
+          }
+          else
+          {
+            n = AddVector(n, phongNormals[i*4+3]);
+          }
+        }
       }
     }
-
-    if (isQuad)
-    {
-      v = AddVector(v, verts[idx3]);
-
-      mesh->indices.push_back(vertOfs+0);
-      mesh->indices.push_back(vertOfs+2);
-      mesh->indices.push_back(vertOfs+3);
-      vertOfs++;
-    }
-
-    vertOfs += 3;
   }
 
+  if (phongNormals)
+    DeleteMem(phongNormals);
+
   scene.meshes.push_back(mesh);
-  //Print();
   return true;
 }
 
@@ -262,7 +303,7 @@ int ParseOptions(int argc, char** argv)
   step(1);
 
   // create output file
-  if (remaining > 1)
+  if (remaining == 1)
   {
     options.outputFilename = argv[curArg];
   }
