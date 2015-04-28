@@ -53,6 +53,27 @@ Bool AlienLayer::Execute()
 }
 
 //-----------------------------------------------------------------------------
+Bool AlienPrimitiveObjectData::Execute()
+{
+  // decide the object type
+  if (type_id == Ocube)
+  {
+    // get the size of the cube
+    GeData cubeData;
+    GetNode()->GetParameter(PRIM_CUBE_LEN, cubeData);
+    Vector xyzLength = cubeData.GetVector();
+    // create your own parametric cube with length X, Y and Z
+    // ...
+    // returning TRUE we will NOT get another call of PolygonObjectData Execute()
+    // HACK! returning false means the object wasn't processed
+    return false;
+  }
+  // return FALSE to get a simpler geometric description of objects like Osphere, Ocone, ...
+  // the Execute() of AlienPolygonObjectData will be called
+  return false;
+}
+
+//-----------------------------------------------------------------------------
 template<typename T>
 float* AddVector(float* f, const T& v)
 {
@@ -63,16 +84,10 @@ float* AddVector(float* f, const T& v)
 }
 
 //-----------------------------------------------------------------------------
-Bool AlienPolygonObjectData::Execute()
+void ExportVertices(PolygonObject* obj, Mesh* mesh)
 {
-  Mesh* mesh = new Mesh((u32)scene.meshes.size());
-
-  // get object pointer
-  PolygonObject* obj = (PolygonObject*)GetNode();
-
   // get point and polygon array pointer and counts
   const Vector* verts = obj->GetPointR();
-  //u32 numVerts = obj->GetPointCount();
 
   const CPolygon* polys = obj->GetPolygonR();
   u32 numPolys = obj->GetPolygonCount();
@@ -85,7 +100,7 @@ Bool AlienPolygonObjectData::Execute()
     if (polys[i].c == polys[i].d)
       numVerts += 3;
     else
-      numVerts += options.makeFaceted ? 2*3 : 4;
+      numVerts += options.makeFaceted ? 2 * 3 : 4;
   }
 
   // Check what kind of normals exist
@@ -96,18 +111,13 @@ Bool AlienPolygonObjectData::Execute()
   Vector32* phongNormals = hasPhongTag ? obj->CreatePhongNormals() : nullptr;
   NormalTag* normals = hasNormalsTag ? (NormalTag*)obj->GetTag(Tnormal) : nullptr;
 
-  const char* nameCStr = obj->GetName().GetCStringCopy();
-  mesh->name = nameCStr;
-  DeleteMem(nameCStr);
-
-  map<pair<Vector32, Vector32>, int> vv;  
 
   // add verts
-  mesh->verts.resize(numVerts*3);
-  mesh->indices.reserve(numVerts*3);
+  mesh->verts.resize(numVerts * 3);
+  mesh->indices.reserve(numVerts * 3);
 
   if (hasNormals)
-    mesh->normals.resize(numVerts*3);
+    mesh->normals.resize(numVerts * 3);
 
   ConstNormalHandle normalHandle = normals ? normals->GetDataAddressR() : nullptr;
 
@@ -128,9 +138,9 @@ Bool AlienPolygonObjectData::Execute()
     v = AddVector(v, verts[idx1]);
     v = AddVector(v, verts[idx2]);
 
-    mesh->indices.push_back(vertOfs+0);
-    mesh->indices.push_back(vertOfs+1);
-    mesh->indices.push_back(vertOfs+2);
+    mesh->indices.push_back(vertOfs + 0);
+    mesh->indices.push_back(vertOfs + 1);
+    mesh->indices.push_back(vertOfs + 2);
 
     if (isQuad)
     {
@@ -142,18 +152,18 @@ Bool AlienPolygonObjectData::Execute()
         v = AddVector(v, verts[idx2]);
         v = AddVector(v, verts[idx3]);
 
-        mesh->indices.push_back(vertOfs+3+0);
-        mesh->indices.push_back(vertOfs+3+1);
-        mesh->indices.push_back(vertOfs+3+2);
+        mesh->indices.push_back(vertOfs + 3 + 0);
+        mesh->indices.push_back(vertOfs + 3 + 1);
+        mesh->indices.push_back(vertOfs + 3 + 2);
         vertOfs += 6;
       }
       else
       {
         v = AddVector(v, verts[idx3]);
 
-        mesh->indices.push_back(vertOfs+0);
-        mesh->indices.push_back(vertOfs+2);
-        mesh->indices.push_back(vertOfs+3);
+        mesh->indices.push_back(vertOfs + 0);
+        mesh->indices.push_back(vertOfs + 2);
+        mesh->indices.push_back(vertOfs + 3);
         vertOfs += 4;
       }
     }
@@ -184,21 +194,21 @@ Bool AlienPolygonObjectData::Execute()
       }
       else if (hasPhongTag)
       {
-        n = AddVector(n, phongNormals[i*4+0]);
-        n = AddVector(n, phongNormals[i*4+1]);
-        n = AddVector(n, phongNormals[i*4+2]);
+        n = AddVector(n, phongNormals[i * 4 + 0]);
+        n = AddVector(n, phongNormals[i * 4 + 1]);
+        n = AddVector(n, phongNormals[i * 4 + 2]);
 
         if (isQuad)
         {
           if (options.makeFaceted)
           {
-            n = AddVector(n, phongNormals[i*4+0]);
-            n = AddVector(n, phongNormals[i*4+2]);
-            n = AddVector(n, phongNormals[i*4+3]);
+            n = AddVector(n, phongNormals[i * 4 + 0]);
+            n = AddVector(n, phongNormals[i * 4 + 2]);
+            n = AddVector(n, phongNormals[i * 4 + 3]);
           }
           else
           {
-            n = AddVector(n, phongNormals[i*4+3]);
+            n = AddVector(n, phongNormals[i * 4 + 3]);
           }
         }
       }
@@ -207,6 +217,103 @@ Bool AlienPolygonObjectData::Execute()
 
   if (phongNormals)
     DeleteMem(phongNormals);
+}
+
+//-----------------------------------------------------------------------------
+void ExportMaterials(PolygonObject* obj, Mesh* mesh)
+{
+  GeData data;
+
+  for (BaseTag* btag = obj->GetFirstTag(); btag; btag = (BaseTag*)btag->GetNext())
+  {
+    const char* tagName = btag->GetName().GetCStringCopy();
+    if (tagName)
+    {
+      printf("   - %s \"%s\"\n", GetObjectTypeName(btag->GetType()), tagName);
+      DeleteMem(tagName);
+    }
+
+    // texture tag
+    if (btag->GetType() == Ttexture)
+    {
+      // detect the material
+      AlienMaterial *mat = NULL;
+      if (btag->GetParameter(TEXTURETAG_MATERIAL, data))
+        mat = (AlienMaterial*)data.GetLink();
+      if (mat)
+      {
+        char *pCharMat = NULL, *pCharSh = NULL;
+        Vector col = Vector(0.0, 0.0, 0.0);
+        if (mat->GetParameter(MATERIAL_COLOR_COLOR, data))
+          col = data.GetVector();
+
+        pCharMat = mat->GetName().GetCStringCopy();
+        if (pCharMat)
+        {
+          printf(" - material: \"%s\" (%d/%d/%d)", pCharMat, int(col.x * 255), int(col.y * 255), int(col.z * 255));
+          DeleteMem(pCharMat);
+        }
+        else
+          printf(" - material: <noname> (%d/%d/%d)", int(col.x * 255), int(col.y * 255), int(col.z * 255));
+        // detect the shader
+        BaseShader* sh = mat->GetShader(MATERIAL_COLOR_SHADER);
+        if (sh)
+        {
+          pCharSh = sh->GetName().GetCStringCopy();
+          if (pCharSh)
+          {
+            printf(" - color shader \"%s\" - Type: %s", pCharSh, GetObjectTypeName(sh->GetType()));
+            DeleteMem(pCharSh);
+          }
+          else
+            printf(" - color shader <noname> - Type: %s", GetObjectTypeName(sh->GetType()));
+        }
+        else
+          printf(" - no shader");
+      }
+      else
+        printf(" - no material");
+    }
+
+    // Polygon Selection Tag
+    if (btag->GetType() == Tpolygonselection && obj->GetType() == Opolygon)
+    {
+      printf("\n");
+      BaseSelect *bs = ((SelectionTag*)btag)->GetBaseSelect();
+      if (bs)
+      {
+        LONG s = 0;
+        for (s = 0; s < ((PolygonObject*)obj)->GetPolygonCount() && s < 5; s++)
+        {
+          if (bs->IsSelected(s))
+            printf("     Poly %d: selected\n", (int)s);
+          else
+            printf("     Poly %d: NOT selected\n", (int)s);
+        }
+        if (s < ((PolygonObject*)obj)->GetPolygonCount())
+          printf("     ...\n");
+      }
+    }
+
+    printf("\n");
+  }
+}
+
+//-----------------------------------------------------------------------------
+Bool AlienPolygonObjectData::Execute()
+{
+  Mesh* mesh = new Mesh((u32)scene.meshes.size());
+
+  // get object pointer
+  PolygonObject* obj = (PolygonObject*)GetNode();
+
+  const char* nameCStr = obj->GetName().GetCStringCopy();
+  mesh->name = nameCStr;
+  printf("Exporting: %s\n", nameCStr);
+  DeleteMem(nameCStr);
+
+  ExportVertices(obj, mesh);
+  ExportMaterials(obj, mesh);
 
   scene.meshes.push_back(mesh);
   return true;
@@ -221,12 +328,20 @@ NodeData *AllocAlienObjectData(Int32 id, Bool &known)
   {
     // supported element types
     case Opolygon:        m_data = NewObj(AlienPolygonObjectData); break;
+    case Osphere: m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Ocube: m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Oplane: m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Ocone: m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Otorus: m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Ocylinder: m_data = NewObj(AlienPrimitiveObjectData, id); break;
+
     default:              known = false; break;
   }
 
   return m_data;
 }
 
+//-----------------------------------------------------------------------------
 // allocate the plugin tag elements data (only few tags have additional data which is stored in a NodeData)
 NodeData *AllocAlienTagData(Int32 id, Bool &known)
 {
@@ -342,6 +457,14 @@ int main(int argc, char** argv)
   C4Dfile->Close();
 
   C4Ddoc->CreateSceneFromC4D();
+
+  BaseMaterial* mat = C4Ddoc->GetFirstMaterial();
+  while (mat)
+  {
+    String name = mat->GetName();
+    mat = mat->GetNext();
+  }
+
   scene.Save(options.outputFilename.c_str());
 
   DeleteObj(C4Ddoc);

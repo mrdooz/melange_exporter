@@ -46,4 +46,15 @@ namespace melange
     virtual Bool Execute();
     void Print();
   };
+
+  // this self defined alien primitive object data will “understand” a Cube as parametric Cube
+  // all other objects are unknown and we will get a polygonal description for them
+  class AlienPrimitiveObjectData : public NodeData
+  {
+    INSTANCEOF(AlienPrimitiveObjectData, NodeData)
+    LONG type_id;
+  public:
+    AlienPrimitiveObjectData(LONG id) : type_id(id) {}
+    virtual Bool Execute();
+  };
 }
