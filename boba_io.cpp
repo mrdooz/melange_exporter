@@ -4,6 +4,8 @@
 
 namespace boba
 {
+  u32 Material::nextId;
+
   class DeferredWriter
   {
   public:

@@ -8,10 +8,15 @@ typedef uint8_t u8;
 
 using namespace std;
 
+namespace melange
+{
+  class BaseMaterial;
+}
+
 namespace boba
 {
 
-
+  class DeferredWriter;
   //------------------------------------------------------------------------------
   template <typename T>
   struct Vec3
@@ -24,6 +29,14 @@ namespace boba
   typedef Vec3<float> Vec3f;
 
   //------------------------------------------------------------------------------
+  struct Color
+  {
+    Color(float r, float g, float b) : r(r), g(g), b(b), a(1) {}
+    Color() : r(0), g(0), b(0), a(1) {}
+    float r, g, b, a;
+  };
+
+  //------------------------------------------------------------------------------
   struct Sphere
   {
     Vec3<float> center;
@@ -31,15 +44,57 @@ namespace boba
   };
 
   //------------------------------------------------------------------------------
+
+  struct MaterialComponent
+  {
+    Color color;
+    string texture;
+    float brightness;
+  };
+
+  struct Material
+  {
+    enum Flags
+    { 
+      FLAG_COLOR      = 1 << 0,
+      FLAG_LUMINANCE  = 1 << 1,
+      FLAG_REFLECTION = 1 << 2,
+    };
+
+    Material() : flags(0),  mat(nullptr), id(nextId++) {}
+
+    string name;
+    u32 flags;
+    melange::BaseMaterial* mat;
+    u32 id;
+
+    MaterialComponent color;
+    MaterialComponent luminance;
+    MaterialComponent reflection;
+
+    static u32 nextId;
+  };
+
+  //------------------------------------------------------------------------------
   struct Mesh
   {
     Mesh(u32 idx) : idx(idx) {}
+
+    struct MaterialFaces
+    {
+      u32 materialId;
+      u32 startTri;
+      u32 numTris;
+    };
+
+    void Save(DeferredWriter* writer);
     u32 idx;
     string name;
     vector<float> verts;
     vector<float> normals;
     vector<float> uv;
     vector<int> indices;
+    vector<MaterialFaces> materialFaces;
 
     Sphere boundingSphere;
   };
@@ -48,6 +103,7 @@ namespace boba
   struct Scene
   {
     bool Save(const char* filename);
+    vector<Material> materials;
     vector<Mesh*> meshes;
   };
 

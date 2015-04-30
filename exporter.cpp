@@ -14,10 +14,14 @@
 #include <assert.h>
 #include <set>
 #include <map>
+#include <algorithm>
 
 //-----------------------------------------------------------------------------
 using namespace melange;
 using namespace boba;
+using namespace std;
+
+#define RANGE(c) (c).begin(), (c).end()
 
 struct Options
 {
@@ -72,6 +76,16 @@ Bool AlienPrimitiveObjectData::Execute()
   // the Execute() of AlienPolygonObjectData will be called
   return false;
 }
+
+//-----------------------------------------------------------------------------
+class AlienBaseDocument : public BaseDocument
+{
+public:
+  virtual Bool Execute()
+  {
+    return true;
+  }
+};
 
 //-----------------------------------------------------------------------------
 template<typename T>
@@ -219,60 +233,123 @@ void ExportVertices(PolygonObject* obj, Mesh* mesh)
     DeleteMem(phongNormals);
 }
 
-//-----------------------------------------------------------------------------
-void ExportMaterials(PolygonObject* obj, Mesh* mesh)
+string CopyString(const String& str)
+{
+  string res;
+  if (char* c = str.GetCStringCopy())
+  {
+    res = string(c);
+    DeleteMem(c);
+  }
+  return res;
+}
+
+
+template <typename R, typename T>
+R GetVectorParam(T* obj, int paramId)
 {
   GeData data;
+  obj->GetParameter(paramId, data);
+  Vector v = data.GetVector();
+  return R(v.x, v.y, v.z);
+}
+
+
+template <typename T>
+Float GetFloatParam(T* obj, int paramId)
+{
+  GeData data;
+  obj->GetParameter(paramId, data);
+  return data.GetFloat();
+}
+
+
+void ExportMaterials(AlienBaseDocument* c4dDoc)
+{
+  // get the first material from the document and go through the whole list
+  BaseMaterial* mat = c4dDoc->GetFirstMaterial();
+  while (mat)
+  {
+    //printf("mat: %p\n", mat);
+    // basic data
+    String name = mat->GetName();
+
+    // check if the material is a standard material
+    if (mat->GetType() == Mmaterial)
+    {
+      scene.materials.push_back(boba::Material());
+      boba::Material& exporterMaterial = scene.materials.back();
+      exporterMaterial.mat = mat;
+      exporterMaterial.name = CopyString(name);
+
+      // check if the given channel is used in the material
+      if (((melange::Material*)mat)->GetChannelState(CHANNEL_COLOR))
+      {
+        exporterMaterial.flags |= boba::Material::FLAG_COLOR;
+
+        exporterMaterial.color.brightness = GetFloatParam(mat, MATERIAL_COLOR_BRIGHTNESS);
+        exporterMaterial.color.color = GetVectorParam<Color>(mat, MATERIAL_COLOR_COLOR);
+      }
+
+      if (((melange::Material*)mat)->GetChannelState(CHANNEL_REFLECTION))
+      {
+        exporterMaterial.flags |= boba::Material::FLAG_REFLECTION;
+
+        exporterMaterial.reflection.brightness = GetFloatParam(mat, MATERIAL_REFLECTION_BRIGHTNESS);
+        exporterMaterial.reflection.color = GetVectorParam<Color>(mat, MATERIAL_REFLECTION_COLOR);
+      }
+
+    }
+
+    mat = mat->GetNext();
+  }
+}
+
+//-----------------------------------------------------------------------------
+void ExportMeshMaterials(PolygonObject* obj, Mesh* mesh)
+{
 
   for (BaseTag* btag = obj->GetFirstTag(); btag; btag = (BaseTag*)btag->GetNext())
   {
-    const char* tagName = btag->GetName().GetCStringCopy();
-    if (tagName)
-    {
-      printf("   - %s \"%s\"\n", GetObjectTypeName(btag->GetType()), tagName);
-      DeleteMem(tagName);
-    }
-
     // texture tag
     if (btag->GetType() == Ttexture)
     {
-      // detect the material
-      AlienMaterial *mat = NULL;
-      if (btag->GetParameter(TEXTURETAG_MATERIAL, data))
-        mat = (AlienMaterial*)data.GetLink();
-      if (mat)
-      {
-        char *pCharMat = NULL, *pCharSh = NULL;
-        Vector col = Vector(0.0, 0.0, 0.0);
-        if (mat->GetParameter(MATERIAL_COLOR_COLOR, data))
-          col = data.GetVector();
+      GeData data;
+      AlienMaterial *mat = btag->GetParameter(TEXTURETAG_MATERIAL, data) ? (AlienMaterial*)data.GetLink() : NULL;
+      if (!mat)
+        continue;
 
-        pCharMat = mat->GetName().GetCStringCopy();
-        if (pCharMat)
-        {
-          printf(" - material: \"%s\" (%d/%d/%d)", pCharMat, int(col.x * 255), int(col.y * 255), int(col.z * 255));
-          DeleteMem(pCharMat);
-        }
-        else
-          printf(" - material: <noname> (%d/%d/%d)", int(col.x * 255), int(col.y * 255), int(col.z * 255));
-        // detect the shader
-        BaseShader* sh = mat->GetShader(MATERIAL_COLOR_SHADER);
-        if (sh)
-        {
-          pCharSh = sh->GetName().GetCStringCopy();
-          if (pCharSh)
-          {
-            printf(" - color shader \"%s\" - Type: %s", pCharSh, GetObjectTypeName(sh->GetType()));
-            DeleteMem(pCharSh);
-          }
-          else
-            printf(" - color shader <noname> - Type: %s", GetObjectTypeName(sh->GetType()));
-        }
-        else
-          printf(" - no shader");
+      auto materialIt = find_if(RANGE(scene.materials), [mat](const boba::Material& m) { return m.mat == mat; });
+      if (materialIt == scene.materials.end())
+        continue;
+
+
+      Vector col = mat->GetParameter(MATERIAL_COLOR_COLOR, data) ? data.GetVector() : Vector(0.0, 0.0, 0.0);
+
+      char* pCharMat = mat->GetName().GetCStringCopy();
+      if (pCharMat)
+      {
+        printf(" - material: \"%s\" (%d/%d/%d)", pCharMat, int(col.x * 255), int(col.y * 255), int(col.z * 255));
+        DeleteMem(pCharMat);
       }
       else
-        printf(" - no material");
+        printf(" - material: <noname> (%d/%d/%d)", int(col.x * 255), int(col.y * 255), int(col.z * 255));
+
+      // detect the shader
+      BaseShader* sh = mat->GetShader(MATERIAL_COLOR_SHADER);
+      if (sh)
+      {
+        char* pCharSh = sh->GetName().GetCStringCopy();
+        if (pCharSh)
+        {
+          printf(" - color shader \"%s\" - Type: %s", pCharSh, GetObjectTypeName(sh->GetType()));
+          DeleteMem(pCharSh);
+        }
+        else
+          printf(" - color shader <noname> - Type: %s", GetObjectTypeName(sh->GetType()));
+      }
+      else
+        printf(" - no shader");
     }
 
     // Polygon Selection Tag
@@ -313,7 +390,7 @@ Bool AlienPolygonObjectData::Execute()
   DeleteMem(nameCStr);
 
   ExportVertices(obj, mesh);
-  ExportMaterials(obj, mesh);
+  ExportMeshMaterials(obj, mesh);
 
   scene.meshes.push_back(mesh);
   return true;
@@ -356,15 +433,6 @@ Bool BaseDocument::CreateSceneToC4D(Bool selectedonly)
   return true;
 }
 
-//-----------------------------------------------------------------------------
-class AlienBaseDocument : public BaseDocument
-{
-public:
-  virtual Bool Execute() 
-  { 
-    return true; 
-  }
-};
 
 //-----------------------------------------------------------------------------
 int ParseOptions(int argc, char** argv)
@@ -455,6 +523,7 @@ int main(int argc, char** argv)
     return 1;
 
   C4Dfile->Close();
+  ExportMaterials(C4Ddoc);
 
   C4Ddoc->CreateSceneFromC4D();
 
