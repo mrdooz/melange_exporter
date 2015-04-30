@@ -137,7 +137,7 @@ namespace boba
   {
     char id[4];
     u32 fixupOffset;
-    u32 elementOffset[SceneElement::NumElements];
+    u32 elementOffset[(int)SceneElement::NumElements];
 #pragma warning(suppress: 4200)
     char data[0];
   };

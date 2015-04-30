@@ -359,7 +359,7 @@ void ExportMeshMaterials(PolygonObject* obj, Mesh* mesh)
       BaseSelect *bs = ((SelectionTag*)btag)->GetBaseSelect();
       if (bs)
       {
-        LONG s = 0;
+        int s = 0;
         for (s = 0; s < ((PolygonObject*)obj)->GetPolygonCount() && s < 5; s++)
         {
           if (bs->IsSelected(s))

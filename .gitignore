@@ -4,6 +4,7 @@ Distribution/
 _win32/_ReSharper.*/*
 data/
 ipch/
+.idea/*
 *.ilk
 *.lib
 *.pdb

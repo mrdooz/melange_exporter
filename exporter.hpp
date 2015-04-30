@@ -12,7 +12,7 @@ namespace melange
 
   public:
 
-    LONG id;
+    int id;
 
     AlienMaterial() : Material() { id = 0; }
     virtual Bool Execute();
@@ -27,7 +27,7 @@ namespace melange
 
   public:
 
-    LONG id;
+    int id;
 
     AlienLayer() : LayerObject() { }
     virtual Bool Execute();
@@ -40,21 +40,21 @@ namespace melange
     INSTANCEOF(AlienPolygonObjectData, PolygonObjectData)
 
   public:
-    LONG layid;
-    LONG matid;
+    int layid;
+    int matid;
 
     virtual Bool Execute();
     void Print();
   };
 
-  // this self defined alien primitive object data will “understand” a Cube as parametric Cube
+  // this self defined alien primitive object data will ï¿½understandï¿½ a Cube as parametric Cube
   // all other objects are unknown and we will get a polygonal description for them
   class AlienPrimitiveObjectData : public NodeData
   {
     INSTANCEOF(AlienPrimitiveObjectData, NodeData)
-    LONG type_id;
+    int type_id;
   public:
-    AlienPrimitiveObjectData(LONG id) : type_id(id) {}
+    AlienPrimitiveObjectData(int id) : type_id(id) {}
     virtual Bool Execute();
   };
 }

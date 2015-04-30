@@ -165,6 +165,12 @@ namespace boba
   };
 
   //------------------------------------------------------------------------------
+  template<typename T, typename U> constexpr size_t offsetOf(U T::*member)
+  {
+    return (char*)&((T*)nullptr->*member) - (char*)nullptr;
+  }
+
+  //------------------------------------------------------------------------------
   bool Scene::Save(const char* filename)
   {
     DeferredWriter writer;
@@ -181,7 +187,11 @@ namespace boba
     writer.WriteDeferredStart();
 
     // write mesh start
+    #ifdef _WIN32
     writer.Write(meshes.empty() ? (u32)0 : (u32)offsetof(boba::BobaScene, boba::BobaScene::data));
+    #else
+    writer.Write(meshes.empty() ? (u32)0 : offsetOf(&boba::BobaScene::data));
+    #endif
 
     // write camera start
     writer.Write((u32)0);

@@ -29,7 +29,7 @@ uint64_t tempLayID = 0;
 namespace melange
 {
   void PrintUniqueIDs(BaseList2D *op);
-  void PrintShaderInfo(BaseShader *shader, LONG depth = 0);
+  void PrintShaderInfo(BaseShader *shader, int depth = 0);
   void PrintAnimInfo(BaseList2D *bl);
   void PrintTagInfo(BaseObject *obj);
 
@@ -42,9 +42,9 @@ namespace melange
 
     // get point and polygon array pointer and counts
     const Vector *vAdr = op->GetPointR();
-    LONG pointcnt = op->GetPointCount();
+    int pointcnt = op->GetPointCount();
     const CPolygon *polyAdr = op->GetPolygonR();
-    LONG polycnt = op->GetPolygonCount();
+    int polycnt = op->GetPolygonCount();
 
     // get name of object as string copy (free it after usage!)
     char *pChar = op->GetName().GetCStringCopy();
@@ -68,20 +68,20 @@ namespace melange
       return;
 
     // print 4 points
-    for (LONG p = 0; p < pointcnt && p < 4; p++)
+    for (int p = 0; p < pointcnt && p < 4; p++)
       printf("     P %d: %.1f / %.1f / %.1f\n", (int)p, vAdr[p].x, vAdr[p].y, vAdr[p].z);
 
     // Ngons
-    LONG ncnt = op->GetNgonCount();
+    int ncnt = op->GetNgonCount();
     if (ncnt > 0)
     {
       printf("\n   - %d Ngons found\n", (int)ncnt);
-      for (LONG n=0; n<ncnt && n<3; n++) // show only 3
+      for (int n=0; n<ncnt && n<3; n++) // show only 3
       {
         printf("     Ngon %d with %d Edges\n", (int)n, (int)op->GetNgonBase()->GetNgons()[n].GetCount());
-        for (LONG p=0; p<polycnt && p<3; p++)
+        for (int p=0; p<polycnt && p<3; p++)
         {
-          LONG polyid = op->GetNgonBase()->FindPolygon(p);
+          int polyid = op->GetNgonBase()->FindPolygon(p);
           if (polyid != NOTOK)
             printf("     Polygon %d is included in Ngon %d\n", (int)p, (int)polyid);
           else
@@ -89,7 +89,7 @@ namespace melange
           if (p==2)
             printf("     ...\n");
         }
-        for (LONG e=0; e<op->GetNgonBase()->GetNgons()[n].GetCount()&&e<3; e++)
+        for (int e=0; e<op->GetNgonBase()->GetNgons()[n].GetCount()&&e<3; e++)
         {
           PgonEdge *pEdge = op->GetNgonBase()->GetNgons()[n].GetEdge(e);
           printf("     Edge %d: eidx: %d pid: %d sta: %d f:%d e:%d\n", (int)e, (int)pEdge->EdgeIndex(), (int)pEdge->ID(), (int)pEdge->State(), (int)pEdge->IsFirst(), (int)pEdge->IsSegmentEnd());
@@ -389,13 +389,13 @@ namespace melange
         WeightTagData *wt = (WeightTagData*)btag->GetNodeData();
         if (wt)
         {
-          LONG pCnt = 0;
-          LONG jCnt = wt->GetJointCount();
+          int pCnt = 0;
+          int jCnt = wt->GetJointCount();
           printf(" - Joint Count: %d\n", (int)jCnt);
 
           BaseObject *jOp = NULL;
           // print data for 3 joints and 3 points only
-          for (LONG j=0; j<jCnt && j<3; j++)
+          for (int j=0; j<jCnt && j<3; j++)
           {
             jOp = wt->GetJoint(j, obj->GetDocument());
             if (jOp)
@@ -408,7 +408,7 @@ namespace melange
             if (obj->GetType() == Opolygon)
             {
               pCnt = ((PolygonObject*)obj)->GetPointCount();
-              for (LONG p=0; p<pCnt && p<3; p++)
+              for (int p=0; p<pCnt && p<3; p++)
               {
                 printf("     Weight at Point %d: %f\n", (int)p, wt->GetWeight(j, p));
               }
@@ -467,12 +467,12 @@ namespace melange
       if (btag->GetType() == Tnormal)
       {
         printf("\n");
-        LONG count = ((NormalTag*)btag)->GetDataCount();
+        int count = ((NormalTag*)btag)->GetDataCount();
         const CPolygon *pAdr = NULL;
         if (obj->GetType() == Opolygon)
           pAdr = ((PolygonObject*)obj)->GetPolygonR();
         // print normals of 2 polys
-        for (LONG n=0; n<count && n<2; n++)
+        for (int n=0; n<count && n<2; n++)
         {
           // MAGNUS: broken
 /*
@@ -491,9 +491,9 @@ namespace melange
       {
         printf("\n");
         UVWStruct uvw;
-        LONG uvwCount = ((UVWTag*)btag)->GetDataCount();
+        int uvwCount = ((UVWTag*)btag)->GetDataCount();
         // print for 4 polys uvw infos
-        for (LONG u=0; u<uvwCount && u<4; u++)
+        for (int u=0; u<uvwCount && u<4; u++)
         {
           ((UVWTag*)btag)->Get(((UVWTag*)btag)->GetDataAddressR(), u, uvw);
           printf("     Poly %d: %.2f %.2f %.2f / %.2f %.2f %.2f / %.2f %.2f %.2f / %.2f %.2f %.2f \n", (int)u, uvw.a.x, uvw.a.y, uvw.a.z, uvw.b.x, uvw.b.y, uvw.b.z, uvw.c.x, uvw.c.y, uvw.c.z, uvw.d.x, uvw.d.y, uvw.d.z);
@@ -507,7 +507,7 @@ namespace melange
         BaseSelect *bs = ((SelectionTag*)btag)->GetBaseSelect();
         if (bs)
         {
-          LONG s = 0;
+          int s = 0;
           for (s=0; s<((PolygonObject*)obj)->GetPolygonCount() && s<5; s++)
           {
             if (bs->IsSelected(s))
@@ -525,12 +525,12 @@ namespace melange
   }
 
   // shows how to access parameters of 3 different shader types and prints it to the console
-  void PrintShaderInfo(BaseShader *shader, LONG depth)
+  void PrintShaderInfo(BaseShader *shader, int depth)
   {
     BaseShader *sh = shader;
     while (sh)
     {
-      for (LONG s=0; s<depth; s++) printf(" ");
+      for (int s=0; s<depth; s++) printf(" ");
 
       // type layer shader
       if (sh->GetType() == Xlayer)
@@ -546,7 +546,7 @@ namespace melange
 
           while (lsl)
           {
-            for (LONG s=0; s<depth; s++) printf(" ");
+            for (int s=0; s<depth; s++) printf(" ");
 
             printf(" LayerShaderLayer - %s (%d)\n", GetObjectTypeName(lsl->GetType()), lsl->GetType());
 
@@ -556,7 +556,7 @@ namespace melange
               LayerShaderLayer *subLsl = (LayerShaderLayer*)((BlendFolder*)lsl)->m_Children.GetObject(0);
               while (subLsl)
               {
-                for (LONG s=0; s<depth; s++) printf(" ");
+                for (int s=0; s<depth; s++) printf(" ");
                 printf("  Shader - %s (%d)\n", GetObjectTypeName(subLsl->GetType()), subLsl->GetType());
 
                 // base shader ?
@@ -586,7 +586,7 @@ namespace melange
             pCharShader =  sh->GetFileName().GetFileString().GetCStringCopy();
             if (pCharShader)
             {
-              for (LONG s=0; s<depth; s++) printf(" ");
+              for (int s=0; s<depth; s++) printf(" ");
               printf("texture name only: \"%s\"\n", pCharShader);
               DeleteMem(pCharShader);
             }
@@ -603,12 +603,12 @@ namespace melange
           GeData data;
           sh->GetParameter(SLA_GRADIENT_GRADIENT, data);
           Gradient *pGrad = (Gradient*)data.GetCustomDataType(CUSTOMDATATYPE_GRADIENT);
-          LONG kcnt = pGrad->GetKnotCount();
+          int kcnt = pGrad->GetKnotCount();
           printf(" %d Knots\n", (int)kcnt);
-          for (LONG k=0; k<kcnt; k++)
+          for (int k=0; k<kcnt; k++)
           {
             GradientKnot kn = pGrad->GetKnot(k);
-            for (LONG s=0; s<depth; s++) printf(" ");
+            for (int s=0; s<depth; s++) printf(" ");
             printf("   -> %d. Knot: %.1f/%.1f/%.1f\n", (int)k, kn.col.x*255.0, kn.col.y*255.0, kn.col.z*255.0);
           }
         }
@@ -863,7 +863,7 @@ namespace melange
 
     printf("\n   # Animation Info #");
 
-    LONG tn = 0;
+    int tn = 0;
     CTrack *ct = bl->GetFirstCTrack();
     while (ct)
     {
@@ -889,7 +889,7 @@ namespace melange
 
           CKey *ck = NULL;
           BaseTime t;
-          for (LONG k=0; k<tcc->GetKeyCount(); k++)
+          for (int k=0; k<tcc->GetKeyCount(); k++)
           {
             ck = tcc->GetKey(k);
             t = ck->GetTime();
@@ -939,7 +939,7 @@ namespace melange
 
         CKey *ck = NULL;
         BaseTime t;
-        for (LONG k=0; k<cc->GetKeyCount(); k++)
+        for (int k=0; k<cc->GetKeyCount(); k++)
         {
           ck = cc->GetKey(k);
 
@@ -1026,23 +1026,23 @@ namespace melange
   void PrintMatrix(Matrix m)
   {
     printf("   - Matrix:");
-    LONG size = 6;
+    int size = 6;
     Float f = m.v1.x;
     if (f==0.0)f=0.0;
     if (f<0.0)size--; if (f>=10.0||f<=-10.0)size--; if (f>=100.0||f<=-100.0)size--; if (f>=1000.0||f<=-1000.0)size--; if (f>=10000.0||f<=-10000.0)size--;
-    for (LONG s=0; s<size; s++) printf(" ");
+    for (int s=0; s<size; s++) printf(" ");
     printf("%f", f);
     size = 6;
     f = m.v1.y;
     if (f==0.0)f=0.0;
     if (f<0.0)size--; if (f>=10.0||f<=-10.0)size--; if (f>=100.0||f<=-100.0)size--; if (f>=1000.0||f<=-1000.0)size--; if (f>=10000.0||f<=-10000.0)size--;
-    for (LONG s=0; s<size; s++) printf(" ");
+    for (int s=0; s<size; s++) printf(" ");
     printf("%f", f);
     size = 6;
     f = m.v1.z;
     if (f==0.0)f=0.0;
     if (f<0.0)size--; if (f>=10.0||f<=-10.0)size--; if (f>=100.0||f<=-100.0)size--; if (f>=1000.0||f<=-1000.0)size--; if (f>=10000.0||f<=-10000.0)size--;
-    for (LONG s=0; s<size; s++) printf(" ");
+    for (int s=0; s<size; s++) printf(" ");
     printf("%f\n", f);
 
     printf("           :");
@@ -1050,19 +1050,19 @@ namespace melange
     f = m.v2.x;
     if (f==0.0)f=0.0;
     if (f<0)size--; if (f>=10.0||f<=-10.0)size--; if (f>=100.0||f<=-100.0)size--; if (f>=1000.0||f<=-1000.0)size--; if (f>=10000.0||f<=-10000.0)size--;
-    for (LONG s=0; s<size; s++) printf(" ");
+    for (int s=0; s<size; s++) printf(" ");
     printf("%f", f);
     size = 6;
     f = m.v2.y;
     if (f==0.0)f=0.0;
     if (f<0)size--; if (f>=10.0||f<=-10.0)size--; if (f>=100.0||f<=-100.0)size--; if (f>=1000.0||f<=-1000.0)size--; if (f>=10000.0||f<=-10000.0)size--;
-    for (LONG s=0; s<size; s++) printf(" ");
+    for (int s=0; s<size; s++) printf(" ");
     printf("%f", f);
     size = 6;
     f = m.v2.z;
     if (f==0.0)f=0.0;
     if (f<0)size--; if (f>=10.0||f<=-10.0)size--; if (f>=100.0||f<=-100.0)size--; if (f>=1000.0||f<=-1000.0)size--; if (f>=10000.0||f<=-10000.0)size--;
-    for (LONG s=0; s<size; s++) printf(" ");
+    for (int s=0; s<size; s++) printf(" ");
     printf("%f\n", f);
 
     printf("           :");
@@ -1070,19 +1070,19 @@ namespace melange
     f = m.v3.x;
     if (f==0.0)f=0.0;
     if (f<0)size--; if (f>=10.0||f<=-10.0)size--; if (f>=100.0||f<=-100.0)size--; if (f>=1000.0||f<=-1000.0)size--; if (f>=10000.0||f<=-10000.0)size--;
-    for (LONG s=0; s<size; s++) printf(" ");
+    for (int s=0; s<size; s++) printf(" ");
     printf("%f", f);
     size = 6;
     f = m.v3.y;
     if (f==0.0)f=0.0;
     if (f<0)size--; if (f>=10.0||f<=-10.0)size--; if (f>=100.0||f<=-100.0)size--; if (f>=1000.0||f<=-1000.0)size--; if (f>=10000.0||f<=-10000.0)size--;
-    for (LONG s=0; s<size; s++) printf(" ");
+    for (int s=0; s<size; s++) printf(" ");
     printf("%f", f);
     size = 6;
     f = m.v3.z;
     if (f==0.0)f=0.0;
     if (f<0)size--; if (f>=10.0||f<=-10.0)size--; if (f>=100.0||f<=-100.0)size--; if (f>=1000.0||f<=-1000.0)size--; if (f>=10000.0||f<=-10000.0)size--;
-    for (LONG s=0; s<size; s++) printf(" ");
+    for (int s=0; s<size; s++) printf(" ");
     printf("%f\n", f);
 
     printf("           :");
@@ -1090,19 +1090,19 @@ namespace melange
     f = m.off.x;
     if (f==0.0)f=0.0;
     if (f<0)size--; if (f>=10.0||f<=-10.0)size--; if (f>=100.0||f<=-100.0)size--; if (f>=1000.0||f<=-1000.0)size--; if (f>=10000.0||f<=-10000.0)size--;
-    for (LONG s=0; s<size; s++) printf(" ");
+    for (int s=0; s<size; s++) printf(" ");
     printf("%f", f);
     size = 6;
     f = m.off.y;
     if (f==0.0)f=0.0;
     if (f<0)size--; if (f>=10.0||f<=-10.0)size--; if (f>=100.0||f<=-100.0)size--; if (f>=1000.0||f<=-1000.0)size--; if (f>=10000.0||f<=-10000.0)size--;
-    for (LONG s=0; s<size; s++) printf(" ");
+    for (int s=0; s<size; s++) printf(" ");
     printf("%f", f);
     size = 6;
     f = m.off.z;
     if (f==0.0)f=0.0;
     if (f<0)size--; if (f>=10.0||f<=-10.0)size--; if (f>=100.0||f<=-100.0)size--; if (f>=1000.0||f<=-1000.0)size--; if (f>=10000.0||f<=-10000.0)size--;
-    for (LONG s=0; s<size; s++) printf(" ");
+    for (int s=0; s<size; s++) printf(" ");
     printf("%f\n", f);
   }
 
