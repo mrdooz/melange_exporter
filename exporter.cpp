@@ -233,6 +233,7 @@ void ExportVertices(PolygonObject* obj, Mesh* mesh)
     DeleteMem(phongNormals);
 }
 
+//-----------------------------------------------------------------------------
 string CopyString(const String& str)
 {
   string res;
@@ -245,6 +246,7 @@ string CopyString(const String& str)
 }
 
 
+//-----------------------------------------------------------------------------
 template <typename R, typename T>
 R GetVectorParam(T* obj, int paramId)
 {
@@ -255,15 +257,17 @@ R GetVectorParam(T* obj, int paramId)
 }
 
 
+//-----------------------------------------------------------------------------
 template <typename T>
-Float GetFloatParam(T* obj, int paramId)
+float GetFloatParam(T* obj, int paramId)
 {
   GeData data;
   obj->GetParameter(paramId, data);
-  return data.GetFloat();
+  return (float)data.GetFloat();
 }
 
 
+//-----------------------------------------------------------------------------
 void ExportMaterials(AlienBaseDocument* c4dDoc)
 {
   // get the first material from the document and go through the whole list
@@ -308,72 +312,63 @@ void ExportMaterials(AlienBaseDocument* c4dDoc)
 //-----------------------------------------------------------------------------
 void ExportMeshMaterials(PolygonObject* obj, Mesh* mesh)
 {
+  struct MaterialGroup
+  {
+    u32 materialId;
+    vector<int> polys;
+  };
 
-  for (BaseTag* btag = obj->GetFirstTag(); btag; btag = (BaseTag*)btag->GetNext())
+  map<u32, MaterialGroup> materialGroups;
+  u32 prevMaterial = ~0u;
+
+  // For each material found, check if the following tag is a selection tag, in which
+  // case record which polys belong to it
+
+  for (BaseTag* btag = obj->GetFirstTag(); btag; btag = btag->GetNext())
   {
     // texture tag
     if (btag->GetType() == Ttexture)
     {
       GeData data;
-      AlienMaterial *mat = btag->GetParameter(TEXTURETAG_MATERIAL, data) ? (AlienMaterial*)data.GetLink() : NULL;
+      AlienMaterial *mat = btag->GetParameter(TEXTURETAG_MATERIAL, data) ? (AlienMaterial *) data.GetLink() : NULL;
       if (!mat)
         continue;
 
-      auto materialIt = find_if(RANGE(scene.materials), [mat](const boba::Material& m) { return m.mat == mat; });
+      auto materialIt = find_if(RANGE(scene.materials), [mat](const boba::Material &m) { return m.mat == mat; });
       if (materialIt == scene.materials.end())
         continue;
 
-
-      Vector col = mat->GetParameter(MATERIAL_COLOR_COLOR, data) ? data.GetVector() : Vector(0.0, 0.0, 0.0);
-
-      char* pCharMat = mat->GetName().GetCStringCopy();
-      if (pCharMat)
-      {
-        printf(" - material: \"%s\" (%d/%d/%d)", pCharMat, int(col.x * 255), int(col.y * 255), int(col.z * 255));
-        DeleteMem(pCharMat);
-      }
-      else
-        printf(" - material: <noname> (%d/%d/%d)", int(col.x * 255), int(col.y * 255), int(col.z * 255));
-
-      // detect the shader
-      BaseShader* sh = mat->GetShader(MATERIAL_COLOR_SHADER);
-      if (sh)
-      {
-        char* pCharSh = sh->GetName().GetCStringCopy();
-        if (pCharSh)
-        {
-          printf(" - color shader \"%s\" - Type: %s", pCharSh, GetObjectTypeName(sh->GetType()));
-          DeleteMem(pCharSh);
-        }
-        else
-          printf(" - color shader <noname> - Type: %s", GetObjectTypeName(sh->GetType()));
-      }
-      else
-        printf(" - no shader");
+      boba::Material &bobaMaterial = *materialIt;
+      prevMaterial = bobaMaterial.id;
     }
 
     // Polygon Selection Tag
     if (btag->GetType() == Tpolygonselection && obj->GetType() == Opolygon)
     {
-      printf("\n");
-      BaseSelect *bs = ((SelectionTag*)btag)->GetBaseSelect();
-      if (bs)
+      // add the selected polygons to the last material group
+      if (prevMaterial == ~0u)
       {
-        int s = 0;
-        for (s = 0; s < ((PolygonObject*)obj)->GetPolygonCount() && s < 5; s++)
+        printf("Selection tag found without material group!\n");
+        continue;
+      }
+
+      if (BaseSelect *bs = ((SelectionTag*)btag)->GetBaseSelect())
+      {
+        MaterialGroup &g = materialGroups[prevMaterial];
+        for (int i = 0, e = obj->GetPolygonCount(); i < e; ++i)
         {
-          if (bs->IsSelected(s))
-            printf("     Poly %d: selected\n", (int)s);
-          else
-            printf("     Poly %d: NOT selected\n", (int)s);
+          if (bs->IsSelected(i))
+            g.polys.push_back(i);
         }
-        if (s < ((PolygonObject*)obj)->GetPolygonCount())
-          printf("     ...\n");
       }
     }
-
-    printf("\n");
   }
+
+  for (auto g : materialGroups)
+  {
+    printf("material: %s, %d polys\n", scene.materials[g.first].name.c_str(), (int)g.second.polys.size());
+  }
+
 }
 
 //-----------------------------------------------------------------------------

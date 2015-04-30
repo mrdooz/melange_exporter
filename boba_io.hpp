@@ -83,8 +83,8 @@ namespace boba
     struct MaterialFaces
     {
       u32 materialId;
-      u32 startTri;
-      u32 numTris;
+      u32 startTri = ~0u;
+      u32 numTris = ~0u;
     };
 
     void Save(DeferredWriter* writer);
