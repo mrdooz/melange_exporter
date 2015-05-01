@@ -6,6 +6,7 @@
 
 namespace melange
 {
+  //-----------------------------------------------------------------------------
   class AlienMaterial : public Material
   {
     INSTANCEOF(AlienMaterial, Material)
@@ -19,7 +20,7 @@ namespace melange
     void Print();
   };
 
-
+  //-----------------------------------------------------------------------------
   //self defined layer with own functions and members
   class AlienLayer : public LayerObject
   {
@@ -34,6 +35,7 @@ namespace melange
     void Print();
   };
 
+  //-----------------------------------------------------------------------------
   //self defined polygon object data with own functions and members
   class AlienPolygonObjectData : public PolygonObjectData
   {
@@ -47,6 +49,15 @@ namespace melange
     void Print();
   };
 
+  //-----------------------------------------------------------------------------
+  class AlienBaseDocument : public BaseDocument
+  {
+    INSTANCEOF(AlienBaseDocument, BaseDocument)
+  public:
+    virtual Bool Execute() { return true; }
+  };
+
+  //-----------------------------------------------------------------------------
   // this self defined alien primitive object data will �understand� a Cube as parametric Cube
   // all other objects are unknown and we will get a polygonal description for them
   class AlienPrimitiveObjectData : public NodeData

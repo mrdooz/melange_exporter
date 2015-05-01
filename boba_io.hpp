@@ -94,7 +94,7 @@ namespace boba
       u32 numTris = ~0u;
     };
 
-    void Save(DeferredWriter* writer);
+    void Save(DeferredWriter& writer);
     u32 idx;
     string name;
     vector<float> verts;
@@ -146,6 +146,9 @@ namespace boba
     char id[4];
     u32 fixupOffset;
     u32 elementOffset[(int)SceneElement::NumElements];
+    u32 numMeshes;
+    u32 numLights;
+    u32 numCameras;
 #pragma warning(suppress: 4200)
     char data[0];
   };

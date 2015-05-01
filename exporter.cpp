@@ -33,11 +33,53 @@ struct Options
   string inputFilename;
   string outputFilename;
   bool makeFaceted = false;
-  int verbosity = 0;
+  int verbosity = 2;
 };
 
 Scene scene;
 Options options;
+
+//-----------------------------------------------------------------------------
+string CopyString(const String& str)
+{
+  string res;
+  if (char* c = str.GetCStringCopy())
+  {
+    res = string(c);
+    DeleteMem(c);
+  }
+  return res;
+}
+
+
+//-----------------------------------------------------------------------------
+template <typename R, typename T>
+R GetVectorParam(T* obj, int paramId)
+{
+  GeData data;
+  obj->GetParameter(paramId, data);
+  Vector v = data.GetVector();
+  return R(v.x, v.y, v.z);
+}
+
+//-----------------------------------------------------------------------------
+template<typename T>
+float* AddVector(float* f, const T& v)
+{
+  *f++ = v.x;
+  *f++ = v.y;
+  *f++ = v.z;
+  return f;
+}
+
+//-----------------------------------------------------------------------------
+template <typename T>
+float GetFloatParam(T* obj, int paramId)
+{
+  GeData data;
+  obj->GetParameter(paramId, data);
+  return (float)data.GetFloat();
+}
 
 //-----------------------------------------------------------------------------
 RootMaterial *AllocAlienRootMaterial()			{ return NewObj(RootMaterial); }
@@ -82,25 +124,6 @@ Bool AlienPrimitiveObjectData::Execute()
   return false;
 }
 
-//-----------------------------------------------------------------------------
-class AlienBaseDocument : public BaseDocument
-{
-public:
-  virtual Bool Execute()
-  {
-    return true;
-  }
-};
-
-//-----------------------------------------------------------------------------
-template<typename T>
-float* AddVector(float* f, const T& v)
-{
-  *f++ = v.x;
-  *f++ = v.y;
-  *f++ = v.z;
-  return f;
-}
 
 //-----------------------------------------------------------------------------
 void ExportVertices(PolygonObject* obj, Mesh* mesh)
@@ -110,40 +133,41 @@ void ExportVertices(PolygonObject* obj, Mesh* mesh)
 
   const CPolygon* polysOrg = obj->GetPolygonR();
 
-  int numPolys = obj->GetPolygonCount();
-  u32 numVerts = 0;
-  for (int i = 0; i < numPolys; ++i)
-  {
-    // if the polygon is a quad, we're going to double the shared verts
-    if (polysOrg[i].c == polysOrg[i].d)
-      numVerts += 3;
-    else
-      numVerts += options.makeFaceted ? 2 * 3 : 4;
-  }
 
   // Loop over all the materials, and add the polygons in the
   // order they appear per material
   struct Polygon { int a, b, c, d; };
-  vector<Polygon> polys(numPolys);
+  vector<Polygon> polys;
+  polys.reserve(obj->GetPolygonCount());
 
-  u32 idx = 0;
+  int numPolys = 0;
+  int idx = 0;
   for (auto kv : mesh->materialGroups)
   {
     Mesh::MaterialFaces mf;
     mf.materialId = kv.first;
     mf.startTri = idx;
+    numPolys += (int)kv.second.polys.size();
 
     for (int i : kv.second.polys)
     {
-      polys[idx].a = polysOrg[i].a;
-      polys[idx].b = polysOrg[i].b;
-      polys[idx].c = polysOrg[i].c;
-      polys[idx].d = polysOrg[i].d;
+      polys.push_back({ polysOrg[i].a, polysOrg[i].b, polysOrg[i].c, polysOrg[i].d });
       idx++;
     }
     mf.numTris = idx - mf.startTri;
     mesh->materialFaces.push_back(mf);
   }
+
+  u32 numVerts = 0;
+  for (int i = 0; i < numPolys; ++i)
+  {
+    // if the polygon is a quad, we're going to double the shared verts
+    if (polys[i].c == polys[i].d)
+      numVerts += 3;
+    else
+      numVerts += options.makeFaceted ? 2 * 3 : 4;
+  }
+
 
   // Check what kind of normals exist
   bool hasNormalsTag = !!obj->GetTag(Tnormal);
@@ -152,7 +176,6 @@ void ExportVertices(PolygonObject* obj, Mesh* mesh)
 
   Vector32* phongNormals = hasPhongTag ? obj->CreatePhongNormals() : nullptr;
   NormalTag* normals = hasNormalsTag ? (NormalTag*)obj->GetTag(Tnormal) : nullptr;
-
 
   // add verts
   mesh->verts.resize(numVerts * 3);
@@ -167,7 +190,7 @@ void ExportVertices(PolygonObject* obj, Mesh* mesh)
   float* n = mesh->normals.data();
   u32 vertOfs = 0;
 
-  for (u32 i = 0; i < numPolys; ++i)
+  for (int i = 0; i < numPolys; ++i)
   {
     int idx0 = polys[i].a;
     int idx1 = polys[i].b;
@@ -262,41 +285,7 @@ void ExportVertices(PolygonObject* obj, Mesh* mesh)
 }
 
 //-----------------------------------------------------------------------------
-string CopyString(const String& str)
-{
-  string res;
-  if (char* c = str.GetCStringCopy())
-  {
-    res = string(c);
-    DeleteMem(c);
-  }
-  return res;
-}
-
-
-//-----------------------------------------------------------------------------
-template <typename R, typename T>
-R GetVectorParam(T* obj, int paramId)
-{
-  GeData data;
-  obj->GetParameter(paramId, data);
-  Vector v = data.GetVector();
-  return R(v.x, v.y, v.z);
-}
-
-
-//-----------------------------------------------------------------------------
-template <typename T>
-float GetFloatParam(T* obj, int paramId)
-{
-  GeData data;
-  obj->GetParameter(paramId, data);
-  return (float)data.GetFloat();
-}
-
-
-//-----------------------------------------------------------------------------
-void ExportMaterials(AlienBaseDocument* c4dDoc)
+void CollectMaterials(AlienBaseDocument* c4dDoc)
 {
   // get the first material from the document and go through the whole list
   BaseMaterial* mat = c4dDoc->GetFirstMaterial();
@@ -338,7 +327,7 @@ void ExportMaterials(AlienBaseDocument* c4dDoc)
 }
 
 //-----------------------------------------------------------------------------
-void ExportMeshMaterials(PolygonObject* obj, Mesh* mesh)
+void CollectMeshMaterials(PolygonObject* obj, Mesh* mesh)
 {
   unordered_set<u32> selectedPolys;
 
@@ -425,7 +414,7 @@ Bool AlienPolygonObjectData::Execute()
   mesh->name = meshName;
   LOG(1, "Exporting: %s\n", meshName.c_str());
 
-  ExportMeshMaterials(obj, mesh);
+  CollectMeshMaterials(obj, mesh);
   ExportVertices(obj, mesh);
 
   scene.meshes.push_back(mesh);
@@ -558,7 +547,7 @@ int main(int argc, char** argv)
     return 1;
 
   C4Dfile->Close();
-  ExportMaterials(C4Ddoc);
+  CollectMaterials(C4Ddoc);
 
   C4Ddoc->CreateSceneFromC4D();
 

@@ -165,11 +165,12 @@ namespace boba
   };
 
   //------------------------------------------------------------------------------
+#ifndef _WIN32
   template<typename T, typename U> constexpr size_t offsetOf(U T::*member)
   {
     return (char*)&((T*)nullptr->*member) - (char*)nullptr;
   }
-
+#endif
   //------------------------------------------------------------------------------
   bool Scene::Save(const char* filename)
   {
@@ -177,6 +178,7 @@ namespace boba
     if (!writer.Open(filename))
       return false;
 
+    // TODO! fix this!
     boba::BobaScene header;
     header.id[0] = 'b';
     header.id[1] = 'o';
@@ -203,30 +205,9 @@ namespace boba
     {
       // add # meshes
       writer.Write((u32)meshes.size());
-
-      u32 numMeshes = (u32)meshes.size();
-
-      // dummy write the meshes, to make sure the elements are in a contiguous block
-      for (const Mesh* mesh : meshes)
+      for (Mesh* mesh : meshes)
       {
-        writer.AddDeferredString(mesh->name);
-        // Note, divide by 3 here to write # verts, and not # floats
-        writer.Write((u32)mesh->verts.size() / 3);
-        writer.Write((u32)mesh->indices.size());
-        writer.AddDeferredVector(mesh->verts);
-        if (mesh->normals.empty())
-          writer.WritePtr(0);
-        else
-          writer.AddDeferredVector(mesh->normals);
-
-        if (mesh->uv.empty())
-          writer.WritePtr(0);
-        else
-          writer.AddDeferredVector(mesh->uv);
-        writer.AddDeferredVector(mesh->indices);
-
-        // save bounding box
-        writer.Write(mesh->boundingSphere);
+        mesh->Save(writer);
       }
     }
 
@@ -235,5 +216,27 @@ namespace boba
     return true;
   }
 
-}
+  //------------------------------------------------------------------------------
+  void Mesh::Save(DeferredWriter& writer)
+  {
+    writer.AddDeferredString(name);
+    // Note, divide by 3 here to write # verts, and not # floats
+    writer.Write((u32)verts.size() / 3);
+    writer.Write((u32)indices.size());
+    writer.AddDeferredVector(verts);
+    if (normals.empty())
+      writer.WritePtr(0);
+    else
+      writer.AddDeferredVector(normals);
 
+    if (uv.empty())
+      writer.WritePtr(0);
+    else
+      writer.AddDeferredVector(uv);
+    writer.AddDeferredVector(indices);
+
+    // save bounding box
+    writer.Write(boundingSphere);
+
+  }
+}
