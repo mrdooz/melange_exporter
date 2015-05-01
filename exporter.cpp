@@ -15,6 +15,11 @@
 #include <set>
 #include <map>
 #include <algorithm>
+#include <unordered_map>
+#include <unordered_set>
+
+#define LOG(lvl, fmt, ...) \
+if (options.verbosity >= lvl) { printf(fmt, __VA_ARGS__); }
 
 //-----------------------------------------------------------------------------
 using namespace melange;
@@ -312,14 +317,10 @@ void ExportMaterials(AlienBaseDocument* c4dDoc)
 //-----------------------------------------------------------------------------
 void ExportMeshMaterials(PolygonObject* obj, Mesh* mesh)
 {
-  struct MaterialGroup
-  {
-    u32 materialId;
-    vector<int> polys;
-  };
+  unordered_set<u32> selectedPolys;
 
-  map<u32, MaterialGroup> materialGroups;
   u32 prevMaterial = ~0u;
+  u32 firstMaterial = ~0u;
 
   // For each material found, check if the following tag is a selection tag, in which
   // case record which polys belong to it
@@ -340,6 +341,8 @@ void ExportMeshMaterials(PolygonObject* obj, Mesh* mesh)
 
       boba::Material &bobaMaterial = *materialIt;
       prevMaterial = bobaMaterial.id;
+      if (firstMaterial == ~0u)
+        firstMaterial = bobaMaterial.id;
     }
 
     // Polygon Selection Tag
@@ -354,21 +357,37 @@ void ExportMeshMaterials(PolygonObject* obj, Mesh* mesh)
 
       if (BaseSelect *bs = ((SelectionTag*)btag)->GetBaseSelect())
       {
-        MaterialGroup &g = materialGroups[prevMaterial];
+        Mesh::MaterialGroup &g = mesh->materialGroups[prevMaterial];
         for (int i = 0, e = obj->GetPolygonCount(); i < e; ++i)
         {
           if (bs->IsSelected(i))
+          {
             g.polys.push_back(i);
+            selectedPolys.insert(i);
+          }
         }
       }
     }
   }
 
-  for (auto g : materialGroups)
+  // add all the polygons that aren't selected to the first material
+  if (firstMaterial != ~0u)
   {
-    printf("material: %s, %d polys\n", scene.materials[g.first].name.c_str(), (int)g.second.polys.size());
+    Mesh::MaterialGroup &g = mesh->materialGroups[firstMaterial];
+    for (int i = 0, e = obj->GetPolygonCount(); i < e; ++i)
+    {
+      if (selectedPolys.count(i) == 0)
+        g.polys.push_back(i);
+    }
   }
 
+  if (options.verbosity >= 2)
+  {
+    for (auto g : mesh->materialGroups)
+    {
+      printf("material: %s, %d polys\n", scene.materials[g.first].name.c_str(), (int)g.second.polys.size());
+    }
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -379,13 +398,12 @@ Bool AlienPolygonObjectData::Execute()
   // get object pointer
   PolygonObject* obj = (PolygonObject*)GetNode();
 
-  const char* nameCStr = obj->GetName().GetCStringCopy();
-  mesh->name = nameCStr;
-  printf("Exporting: %s\n", nameCStr);
-  DeleteMem(nameCStr);
+  string meshName = CopyString(obj->GetName());
+  mesh->name = meshName;
+  LOG(1, "Exporting: %s\n", meshName.c_str());
 
-  ExportVertices(obj, mesh);
   ExportMeshMaterials(obj, mesh);
+  ExportVertices(obj, mesh);
 
   scene.meshes.push_back(mesh);
   return true;

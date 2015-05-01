@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 typedef uint32_t u32;
 typedef uint8_t u8;
@@ -80,6 +81,12 @@ namespace boba
   {
     Mesh(u32 idx) : idx(idx) {}
 
+    struct MaterialGroup
+    {
+      u32 materialId;
+      vector<int> polys;
+    };
+
     struct MaterialFaces
     {
       u32 materialId;
@@ -95,6 +102,7 @@ namespace boba
     vector<float> uv;
     vector<int> indices;
     vector<MaterialFaces> materialFaces;
+    unordered_map<u32, Mesh::MaterialGroup> materialGroups;
 
     Sphere boundingSphere;
   };
