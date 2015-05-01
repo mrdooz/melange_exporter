@@ -108,18 +108,41 @@ void ExportVertices(PolygonObject* obj, Mesh* mesh)
   // get point and polygon array pointer and counts
   const Vector* verts = obj->GetPointR();
 
-  const CPolygon* polys = obj->GetPolygonR();
-  u32 numPolys = obj->GetPolygonCount();
-  u32 numNGons = obj->GetNgonCount();
+  const CPolygon* polysOrg = obj->GetPolygonR();
 
+  int numPolys = obj->GetPolygonCount();
   u32 numVerts = 0;
-  for (u32 i = 0; i < numPolys; ++i)
+  for (int i = 0; i < numPolys; ++i)
   {
     // if the polygon is a quad, we're going to double the shared verts
-    if (polys[i].c == polys[i].d)
+    if (polysOrg[i].c == polysOrg[i].d)
       numVerts += 3;
     else
       numVerts += options.makeFaceted ? 2 * 3 : 4;
+  }
+
+  // Loop over all the materials, and add the polygons in the
+  // order they appear per material
+  struct Polygon { int a, b, c, d; };
+  vector<Polygon> polys(numPolys);
+
+  u32 idx = 0;
+  for (auto kv : mesh->materialGroups)
+  {
+    Mesh::MaterialFaces mf;
+    mf.materialId = kv.first;
+    mf.startTri = idx;
+
+    for (int i : kv.second.polys)
+    {
+      polys[idx].a = polysOrg[i].a;
+      polys[idx].b = polysOrg[i].b;
+      polys[idx].c = polysOrg[i].c;
+      polys[idx].d = polysOrg[i].d;
+      idx++;
+    }
+    mf.numTris = idx - mf.startTri;
+    mesh->materialFaces.push_back(mf);
   }
 
   // Check what kind of normals exist
@@ -458,11 +481,10 @@ int ParseOptions(int argc, char** argv)
     return 1;
   }
 
-  int inputArg = 1;
   int curArg = 1;
   int remaining = argc - 1;
 
-  auto step = [&curArg, &remaining](int steps) { curArg += steps; remaining -= steps; };
+  const auto& step = [&curArg, &remaining](int steps) { curArg += steps; remaining -= steps; };
 
   while (remaining)
   {
@@ -473,7 +495,7 @@ int ParseOptions(int argc, char** argv)
     }
     else if (strcmp(argv[curArg], "--verbose") == 0)
     {
-      // we need at least 1 more argument, for the level
+      // we need at least 1 more argument (for the level)
       if (remaining < 2)
       {
         printf("Invalid args\n");
