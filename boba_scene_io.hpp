@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include "boba_scene.hpp"
+
 
 typedef uint32_t u32;
 typedef uint8_t u8;
@@ -113,43 +115,5 @@ namespace boba
     bool Save(const char* filename);
     vector<Material> materials;
     vector<Mesh*> meshes;
-  };
-
-  enum class SceneElement
-  {
-    Mesh,
-    Camera,
-    Light,
-    NumElements
-  };
-
-  struct ElementChunk
-  {
-    u32 numElements;
-#pragma warning(suppress: 4200)
-    char data[0];
-  };
-
-  struct MeshElement
-  {
-    const char* name;
-    u32 numVerts;
-    u32 numIndices;
-    float* verts;
-    float* normals;
-    float* uv;
-    u32* indices;
-  };
-
-  struct BobaScene
-  {
-    char id[4];
-    u32 fixupOffset;
-    u32 elementOffset[(int)SceneElement::NumElements];
-    u32 numMeshes;
-    u32 numLights;
-    u32 numCameras;
-#pragma warning(suppress: 4200)
-    char data[0];
   };
 }

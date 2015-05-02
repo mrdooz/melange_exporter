@@ -5,7 +5,7 @@
 
 #include "exporter.hpp"
 #include "exporter_helpers.hpp"
-#include "boba_io.hpp"
+#include "boba_scene_io.hpp"
 
 #include <c4d_file.h>
 #include <c4d_ccurve.h>

@@ -1,4 +1,4 @@
-#include "boba_io.hpp"
+#include "boba_scene_io.hpp"
 #include <deque>
 #include <assert.h>
 
@@ -134,6 +134,16 @@ namespace boba
       fwrite(data, 1, len, _f);
     }
 
+    int GetFilePos()
+    {
+      return ftell(_f);
+    }
+
+    void SetFilePos(int p)
+    {
+      fseek(_f, p, SEEK_SET);
+    }
+
   private:
     void PushFilePos()
     {
@@ -148,18 +158,9 @@ namespace boba
       fseek(_f, p, SEEK_SET);
     }
 
-    int GetFilePos()
-    {
-      return ftell(_f);
-    }
-
-    void SetFilePos(int p)
-    {
-      fseek(_f, p, SEEK_SET);
-    }
-
     vector<DeferredData> _deferredData;
     deque<int> _filePosStack;
+    // Where in the file should we write the location of the deferred data (this is not the location itself)
     u32 _deferredStartPos;
     FILE *_f;
   };
@@ -178,40 +179,45 @@ namespace boba
     if (!writer.Open(filename))
       return false;
 
-    // TODO! fix this!
     boba::BobaScene header;
     header.id[0] = 'b';
     header.id[1] = 'o';
     header.id[2] = 'b';
     header.id[3] = 'a';
 
-    writer.WriteRaw(&header, 4);
-    writer.WriteDeferredStart();
+    // dummy write the header
+    writer.Write(header);
 
-    // write mesh start
     #ifdef _WIN32
-    writer.Write(meshes.empty() ? (u32)0 : (u32)offsetof(boba::BobaScene, boba::BobaScene::data));
+    header.meshDataStart = meshes.empty() ? (u32)0 : (u32)offsetof(boba::BobaScene, boba::BobaScene::data);
     #else
-    writer.Write(meshes.empty() ? (u32)0 : offsetOf(&boba::BobaScene::data));
+    header.meshDataStart = meshes.empty() ? (u32)0 : offsetOf(&boba::BobaScene::data);
     #endif
+    header.numMeshes = (u32)meshes.size();
 
     // write camera start
-    writer.Write((u32)0);
+    header.cameraDataStart = 0;
+    header.numCameras = 0;
 
     // write light start
-    writer.Write((u32)0);
+    header.lightDataStart = 0;
+    header.numLights = 0;
 
     if (!meshes.empty())
     {
       // add # meshes
-      writer.Write((u32)meshes.size());
       for (Mesh* mesh : meshes)
       {
         mesh->Save(writer);
       }
     }
 
+    header.fixupOffset = (u32)writer.GetFilePos();
     writer.WriteDeferredData();
+
+    // write back the correct header
+    writer.SetFilePos(0);
+    writer.Write(header);
 
     return true;
   }
@@ -239,4 +245,5 @@ namespace boba
     writer.Write(boundingSphere);
 
   }
+
 }
