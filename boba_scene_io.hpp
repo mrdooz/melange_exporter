@@ -1,10 +1,10 @@
+#if 0
 #pragma once
 #include <stdint.h>
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include "boba_scene.hpp"
-
 
 typedef uint32_t u32;
 typedef uint8_t u8;
@@ -18,12 +18,13 @@ namespace melange
 
 namespace boba
 {
-
   class DeferredWriter;
   //------------------------------------------------------------------------------
   template <typename T>
   struct Vec3
   {
+    template <typename U>
+    Vec3(const U& v) : x(v.x), y(v.y), z(v.z) {}
     Vec3(T x, T y, T z) : x(x), y(y), z(z) {}
     Vec3() {}
     T x, y, z;
@@ -86,12 +87,6 @@ namespace boba
     struct MaterialGroup
     {
       u32 materialId;
-      vector<int> polys;
-    };
-
-    struct MaterialFaces
-    {
-      u32 materialId;
       u32 startTri = ~0u;
       u32 numTris = ~0u;
     };
@@ -103,8 +98,8 @@ namespace boba
     vector<float> normals;
     vector<float> uv;
     vector<int> indices;
-    vector<MaterialFaces> materialFaces;
-    unordered_map<u32, Mesh::MaterialGroup> materialGroups;
+    vector<MaterialGroup> materialGroups;
+    unordered_map<u32, vector<int>> polysByMaterial;
 
     Sphere boundingSphere;
   };
@@ -117,3 +112,4 @@ namespace boba
     vector<Mesh*> meshes;
   };
 }
+#endif

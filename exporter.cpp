@@ -5,7 +5,8 @@
 
 #include "exporter.hpp"
 #include "exporter_helpers.hpp"
-#include "boba_scene_io.hpp"
+#include "boba_scene.hpp"
+#include "deferred_writer.hpp"
 
 #include <c4d_file.h>
 #include <c4d_ccurve.h>
@@ -17,30 +18,43 @@
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
-
-#define LOG(lvl, fmt, ...) \
-if (options.verbosity >= lvl) { printf(fmt, __VA_ARGS__); }
+#include <time.h>
 
 //-----------------------------------------------------------------------------
 using namespace melange;
-using namespace boba;
 using namespace std;
+
+namespace boba
+{
+  struct Options
+  {
+    string inputFilename;
+    string outputFilename;
+    FILE* logfile = nullptr;
+    bool makeFaceted = false;
+    int verbosity = 0;
+  };
+}
+
+boba::Scene scene;
+boba::Options options;
+
+#define LOG(lvl, fmt, ...)                             \
+  if (options.verbosity >= lvl)                        \
+    printf(fmt, __VA_ARGS__);                          \
+  if (options.logfile)                                 \
+    fprintf(options.logfile, fmt, __VA_ARGS__);
 
 #define RANGE(c) (c).begin(), (c).end()
 
-struct Options
+namespace
 {
-  string inputFilename;
-  string outputFilename;
-  bool makeFaceted = false;
-  int verbosity = 2;
-};
+  const u32 DEFAULT_MATERIAL = ~0u;
+}
 
-Scene scene;
-Options options;
 
 //-----------------------------------------------------------------------------
-string CopyString(const String& str)
+string CopyString(const melange::String& str)
 {
   string res;
   if (char* c = str.GetCStringCopy())
@@ -126,13 +140,33 @@ Bool AlienPrimitiveObjectData::Execute()
 
 
 //-----------------------------------------------------------------------------
-void ExportVertices(PolygonObject* obj, Mesh* mesh)
+void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
 {
   // get point and polygon array pointer and counts
   const Vector* verts = obj->GetPointR();
-
   const CPolygon* polysOrg = obj->GetPolygonR();
 
+  int vertexCount = obj->GetPointCount();
+  if (!vertexCount)
+    return;
+
+  // calc bounding sphere (get center and max radius)
+  Vector center(verts[0]);
+  for (int i = 1; i < vertexCount; ++i)
+  {
+    center += verts[i];
+  }
+  center /= vertexCount;
+
+  float radius = (center - verts[1]).GetSquaredLength();
+  for (int i = 2; i < vertexCount; ++i)
+  {
+    float cand = (center - verts[1]).GetSquaredLength();
+    radius = max(radius, cand);
+  }
+
+  mesh->boundingSphere.center = center;
+  mesh->boundingSphere.radius = sqrtf(radius);
 
   // Loop over all the materials, and add the polygons in the
   // order they appear per material
@@ -142,20 +176,20 @@ void ExportVertices(PolygonObject* obj, Mesh* mesh)
 
   int numPolys = 0;
   int idx = 0;
-  for (auto kv : mesh->materialGroups)
+  for (auto kv : mesh->polysByMaterial)
   {
-    Mesh::MaterialFaces mf;
-    mf.materialId = kv.first;
-    mf.startTri = idx;
-    numPolys += (int)kv.second.polys.size();
+    boba::Mesh::MaterialGroup mg;
+    mg.materialId = kv.first;
+    mg.startTri = idx;
+    numPolys += (int)kv.second.size();
 
-    for (int i : kv.second.polys)
+    for (int i : kv.second)
     {
       polys.push_back({ polysOrg[i].a, polysOrg[i].b, polysOrg[i].c, polysOrg[i].d });
       idx++;
     }
-    mf.numTris = idx - mf.startTri;
-    mesh->materialFaces.push_back(mf);
+    mg.numTris = idx - mg.startTri;
+    mesh->materialGroups.push_back(mg);
   }
 
   u32 numVerts = 0;
@@ -167,7 +201,6 @@ void ExportVertices(PolygonObject* obj, Mesh* mesh)
     else
       numVerts += options.makeFaceted ? 2 * 3 : 4;
   }
-
 
   // Check what kind of normals exist
   bool hasNormalsTag = !!obj->GetTag(Tnormal);
@@ -291,7 +324,6 @@ void CollectMaterials(AlienBaseDocument* c4dDoc)
   BaseMaterial* mat = c4dDoc->GetFirstMaterial();
   while (mat)
   {
-    //printf("mat: %p\n", mat);
     // basic data
     String name = mat->GetName();
 
@@ -309,7 +341,7 @@ void CollectMaterials(AlienBaseDocument* c4dDoc)
         exporterMaterial.flags |= boba::Material::FLAG_COLOR;
 
         exporterMaterial.color.brightness = GetFloatParam(mat, MATERIAL_COLOR_BRIGHTNESS);
-        exporterMaterial.color.color = GetVectorParam<Color>(mat, MATERIAL_COLOR_COLOR);
+        exporterMaterial.color.color = GetVectorParam<boba::Color>(mat, MATERIAL_COLOR_COLOR);
       }
 
       if (((melange::Material*)mat)->GetChannelState(CHANNEL_REFLECTION))
@@ -317,7 +349,7 @@ void CollectMaterials(AlienBaseDocument* c4dDoc)
         exporterMaterial.flags |= boba::Material::FLAG_REFLECTION;
 
         exporterMaterial.reflection.brightness = GetFloatParam(mat, MATERIAL_REFLECTION_BRIGHTNESS);
-        exporterMaterial.reflection.color = GetVectorParam<Color>(mat, MATERIAL_REFLECTION_COLOR);
+        exporterMaterial.reflection.color = GetVectorParam<boba::Color>(mat, MATERIAL_REFLECTION_COLOR);
       }
 
     }
@@ -327,7 +359,7 @@ void CollectMaterials(AlienBaseDocument* c4dDoc)
 }
 
 //-----------------------------------------------------------------------------
-void CollectMeshMaterials(PolygonObject* obj, Mesh* mesh)
+void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
 {
   unordered_set<u32> selectedPolys;
 
@@ -360,62 +392,73 @@ void CollectMeshMaterials(PolygonObject* obj, Mesh* mesh)
     // Polygon Selection Tag
     if (btag->GetType() == Tpolygonselection && obj->GetType() == Opolygon)
     {
-      // add the selected polygons to the last material group
+      // skip this selection tag if we can't find a previous material. i don't like relying things
+      // just appearing in the correct order, but right now i don't know of a better way
       if (prevMaterial == ~0u)
       {
-        printf("Selection tag found without material group!\n");
         continue;
       }
 
       if (BaseSelect *bs = ((SelectionTag*)btag)->GetBaseSelect())
       {
-        Mesh::MaterialGroup &g = mesh->materialGroups[prevMaterial];
+        auto& polysByMaterial = mesh->polysByMaterial[prevMaterial];
         for (int i = 0, e = obj->GetPolygonCount(); i < e; ++i)
         {
           if (bs->IsSelected(i))
           {
-            g.polys.push_back(i);
+            polysByMaterial.push_back(i);
             selectedPolys.insert(i);
           }
         }
       }
+
+      // reset the previous material flag to avoid double selection tags causing trouble
+      prevMaterial = ~0u;
     }
   }
 
-  // add all the polygons that aren't selected to the first material
-  if (firstMaterial != ~0u)
+  // if no materials are found, just add them to a dummy material
+  if (firstMaterial == ~0u)
   {
-    Mesh::MaterialGroup &g = mesh->materialGroups[firstMaterial];
+    u32 dummyMaterial = DEFAULT_MATERIAL;
+    auto& polysByMaterial = mesh->polysByMaterial[dummyMaterial];
+    for (int i = 0, e = obj->GetPolygonCount(); i < e; ++i)
+    {
+      polysByMaterial.push_back(i);
+    }
+  }
+  else
+  {
+    // add all the polygons that aren't selected to the first material
+    auto& polysByMaterial = mesh->polysByMaterial[firstMaterial];
     for (int i = 0, e = obj->GetPolygonCount(); i < e; ++i)
     {
       if (selectedPolys.count(i) == 0)
-        g.polys.push_back(i);
+        polysByMaterial.push_back(i);
     }
   }
 
-  if (options.verbosity >= 2)
+  for (auto g : mesh->polysByMaterial)
   {
-    for (auto g : mesh->materialGroups)
-    {
-      printf("material: %s, %d polys\n", scene.materials[g.first].name.c_str(), (int)g.second.polys.size());
-    }
+    const char* materialName = g.first == DEFAULT_MATERIAL ? "<default>" : scene.materials[g.first].name.c_str();
+    LOG(2, "material: %s, %d polys\n", materialName, (int)g.second.size());
   }
 }
 
 //-----------------------------------------------------------------------------
 Bool AlienPolygonObjectData::Execute()
 {
-  Mesh* mesh = new Mesh((u32)scene.meshes.size());
+  boba::Mesh mesh((u32)scene.meshes.size());
 
   // get object pointer
   PolygonObject* obj = (PolygonObject*)GetNode();
 
   string meshName = CopyString(obj->GetName());
-  mesh->name = meshName;
+  mesh.name = meshName;
   LOG(1, "Exporting: %s\n", meshName.c_str());
 
-  CollectMeshMaterials(obj, mesh);
-  ExportVertices(obj, mesh);
+  CollectMeshMaterials(obj, &mesh);
+  CollectVertices(obj, &mesh);
 
   scene.meshes.push_back(mesh);
   return true;
@@ -528,7 +571,145 @@ int ParseOptions(int argc, char** argv)
     }
   }
 
+  options.logfile = fopen((options.outputFilename + ".log").c_str(), "at");
+
   return 0;
+}
+
+u32 boba::Material::nextId;
+
+//------------------------------------------------------------------------------
+#ifndef _WIN32
+template<typename T, typename U> constexpr size_t offsetOf(U T::*member)
+{
+  return (char*)&((T*)nullptr->*member) - (char*)nullptr;
+}
+#endif
+//------------------------------------------------------------------------------
+bool boba::Scene::Save(const Options& options)
+{
+  boba::DeferredWriter writer;
+  if (!writer.Open(options.outputFilename.c_str()))
+    return false;
+
+  boba::SceneBlob header;
+  memset(&header, 0, sizeof(header));
+  header.id[0] = 'b';
+  header.id[1] = 'o';
+  header.id[2] = 'b';
+  header.id[3] = 'a';
+
+  // dummy write the header
+  writer.Write(header);
+
+  header.numMeshes = (u32)meshes.size();
+  header.meshDataStart = writer.GetFilePos();
+  for (Mesh& mesh : meshes)
+    mesh.Save(writer);
+
+  header.numLights = (u32)lights.size();
+  header.lightDataStart = header.numLights ? writer.GetFilePos() : 0;
+  for (Light& light : lights)
+    light.Save(writer);
+
+  header.numCameras = (u32)cameras.size();
+  header.cameraDataStart = header.numCameras ? writer.GetFilePos() : 0;
+  for (Camera& camera : cameras)
+    camera.Save(writer);
+
+  header.numMaterials = (u32)materials.size();
+  header.materialDataStart = header.numMaterials ? writer.GetFilePos() : 0;
+  for (Material& material : materials)
+    material.Save(writer);
+
+  header.fixupOffset = (u32)writer.GetFilePos();
+  writer.WriteDeferredData();
+
+  // write back the correct header
+  writer.SetFilePos(0);
+  writer.Write(header);
+
+  return true;
+}
+
+//------------------------------------------------------------------------------
+void boba::Material::Save(DeferredWriter& writer)
+{
+  writer.StartBlockMarker();
+
+  writer.AddDeferredString(name);
+  writer.Write(id);
+  writer.Write(flags);
+
+  u32 colorFixup = (flags & FLAG_COLOR) ? writer.CreateFixup() : ~0u;
+  writer.WritePtr(0);
+
+  u32 luminanceFixup = (flags & FLAG_LUMINANCE) ? writer.CreateFixup() : ~0u;
+  writer.WritePtr(0);
+
+  u32 reflectionFixup = (flags & FLAG_REFLECTION) ? writer.CreateFixup() : ~0u;
+  writer.WritePtr(0);
+
+  if (flags & FLAG_COLOR)
+  {
+    writer.InsertFixup(colorFixup);
+    writer.Write(color.color);
+    writer.AddDeferredString(color.texture);
+    writer.Write(color.brightness);
+  }
+
+  if (flags & FLAG_LUMINANCE)
+  {
+    writer.InsertFixup(luminanceFixup);
+    writer.Write(luminance.color);
+    writer.AddDeferredString(luminance.texture);
+    writer.Write(luminance.brightness);
+  }
+
+  if (flags & FLAG_REFLECTION)
+  {
+    writer.InsertFixup(reflectionFixup);
+    writer.Write(reflection.color);
+    writer.AddDeferredString(reflection.texture);
+    writer.Write(reflection.brightness);
+  }
+
+  writer.EndBlockMarker();
+}
+
+//------------------------------------------------------------------------------
+void boba::Light::Save(DeferredWriter& writer)
+{
+
+}
+
+//------------------------------------------------------------------------------
+void boba::Camera::Save(DeferredWriter& writer)
+{
+
+}
+
+//------------------------------------------------------------------------------
+void boba::Mesh::Save(boba::DeferredWriter& writer)
+{
+  writer.AddDeferredString(name);
+
+  // Note, divide by 3 here to write # verts, and not # floats
+  writer.Write((u32)verts.size() / 3);
+  writer.Write((u32)indices.size());
+
+  // write the material groups
+  writer.Write((u32)materialGroups.size());
+  writer.AddDeferredVector(materialGroups);
+
+  writer.AddDeferredVector(verts);
+  writer.AddDeferredVector(normals);
+  writer.AddDeferredVector(uv);
+
+  writer.AddDeferredVector(indices);
+
+  // save bounding box
+  writer.Write(boundingSphere);
 }
 
 //-----------------------------------------------------------------------------
@@ -537,6 +718,13 @@ int main(int argc, char** argv)
   if (int res = ParseOptions(argc, argv))
     return res;
 
+  time_t t = time(0);   // get time now
+  struct tm* now = localtime(&t);
+
+  LOG(1, "=========================================================\n[%.4d:%.2d:%.2d-%.2d:%.2d:%.2d] %s -> %s\n",
+    now->tm_year + 1900, now->tm_mon + 1, now->tm_mday, now->tm_hour, now->tm_min, now->tm_sec,
+    options.inputFilename.c_str(), options.outputFilename.c_str());
+  
   AlienBaseDocument *C4Ddoc = NewObj(AlienBaseDocument);
   HyperFile *C4Dfile = NewObj(HyperFile);
 
@@ -551,17 +739,13 @@ int main(int argc, char** argv)
 
   C4Ddoc->CreateSceneFromC4D();
 
-  BaseMaterial* mat = C4Ddoc->GetFirstMaterial();
-  while (mat)
-  {
-    String name = mat->GetName();
-    mat = mat->GetNext();
-  }
-
-  scene.Save(options.outputFilename.c_str());
+  scene.Save(options);
 
   DeleteObj(C4Ddoc);
   DeleteObj(C4Dfile);
+
+  if (options.logfile)
+    fclose(options.logfile);
 
   return 0;
 }

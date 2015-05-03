@@ -110,7 +110,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;__PC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <DisableSpecificWarnings>4996</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4996; 4200</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -147,6 +147,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_LIB;__PC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <DisableSpecificWarnings>4996; 4200</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -158,13 +159,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\boba_io.cpp" />
+    <ClCompile Include="..\boba_scene.cpp" />
+    <ClCompile Include="..\deferred_writer.cpp" />
     <ClCompile Include="..\exporter.cpp" />
     <ClCompile Include="..\exporter_helpers.cpp" />
     <ClCompile Include="..\print_funcs.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\boba_io.hpp" />
+    <ClInclude Include="..\boba_scene.hpp" />
+    <ClInclude Include="..\deferred_writer.hpp" />
     <ClInclude Include="..\exporter.hpp" />
     <ClInclude Include="..\exporter_helpers.hpp" />
   </ItemGroup>
