@@ -180,15 +180,20 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
   {
     boba::Mesh::MaterialGroup mg;
     mg.materialId = kv.first;
-    mg.startTri = idx;
+    mg.startIndex = idx;
     numPolys += (int)kv.second.size();
 
     for (int i : kv.second)
     {
       polys.push_back({ polysOrg[i].a, polysOrg[i].b, polysOrg[i].c, polysOrg[i].d });
-      idx++;
+
+      // increment index counter. if the polygon is a quad, then double the increment
+      if (polysOrg[i].c == polysOrg[i].d)
+        idx += 3;
+      else
+        idx += 2 * 3;
     }
-    mg.numTris = idx - mg.startTri;
+    mg.numIndices = idx - mg.startIndex;
     mesh->materialGroups.push_back(mg);
   }
 
@@ -368,8 +373,7 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
 
   // For each material found, check if the following tag is a selection tag, in which
   // case record which polys belong to it
-
-  for (BaseTag* btag = obj->GetFirstTag(); btag; btag = btag->GetNext())
+    for (BaseTag* btag = obj->GetFirstTag(); btag; btag = btag->GetNext())
   {
     // texture tag
     if (btag->GetType() == Ttexture)
@@ -468,19 +472,16 @@ Bool AlienPolygonObjectData::Execute()
 NodeData *AllocAlienObjectData(Int32 id, Bool &known)
 {
   NodeData *m_data = NULL;
-  known = true;
   switch (id)
   {
     // supported element types
-    case Opolygon:        m_data = NewObj(AlienPolygonObjectData); break;
-    case Osphere: m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Ocube: m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Oplane: m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Ocone: m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Otorus: m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Opolygon:  m_data = NewObj(AlienPolygonObjectData); break;
+    case Osphere:   m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Ocube:     m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Oplane:    m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Ocone:     m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Otorus:    m_data = NewObj(AlienPrimitiveObjectData, id); break;
     case Ocylinder: m_data = NewObj(AlienPrimitiveObjectData, id); break;
-
-    default:              known = false; break;
   }
 
   return m_data;
@@ -493,14 +494,12 @@ NodeData *AllocAlienTagData(Int32 id, Bool &known)
   return 0;
 }
 
-
 //-----------------------------------------------------------------------------
 // create objects, material and layers for the new C4D scene file
 Bool BaseDocument::CreateSceneToC4D(Bool selectedonly)
 {
   return true;
 }
-
 
 //-----------------------------------------------------------------------------
 int ParseOptions(int argc, char** argv)

@@ -161,8 +161,8 @@ namespace boba
     struct MaterialGroup
     {
       u32 materialId;
-      u32 startTri = ~0u;
-      u32 numTris = ~0u;
+      u32 startIndex = ~0u;
+      u32 numIndices = ~0u;
     };
 
     void Save(DeferredWriter& writer);
