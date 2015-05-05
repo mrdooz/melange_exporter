@@ -172,6 +172,7 @@ namespace boba
     vector<float> normals;
     vector<float> uv;
     vector<int> indices;
+    float mtx[12];
     vector<MaterialGroup> materialGroups;
     unordered_map<u32, vector<int>> polysByMaterial;
 

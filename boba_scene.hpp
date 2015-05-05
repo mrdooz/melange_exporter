@@ -41,6 +41,8 @@ namespace boba
     float* uv;
     u32* indices;
 
+    float mtx[12];
+
     // bounding sphere
     float sx, sy, sz, r;
   };

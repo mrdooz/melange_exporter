@@ -24,6 +24,11 @@
 using namespace melange;
 using namespace std;
 
+namespace melange
+{
+  void PrintAnimInfo(BaseList2D *bl);
+}
+
 namespace boba
 {
   struct Options
@@ -465,6 +470,14 @@ Bool AlienPolygonObjectData::Execute()
   CollectVertices(obj, &mesh);
 
   scene.meshes.push_back(mesh);
+
+  // relative and normalized mtx
+  Matrix mtx = obj->GetRelMln();
+  AddVector(&mesh.mtx[0], mtx.v1);
+  AddVector(&mesh.mtx[3], mtx.v2);
+  AddVector(&mesh.mtx[6], mtx.v3);
+  AddVector(&mesh.mtx[9], mtx.off);
+
   return true;
 }
 
@@ -706,6 +719,8 @@ void boba::Mesh::Save(boba::DeferredWriter& writer)
   writer.AddDeferredVector(uv);
 
   writer.AddDeferredVector(indices);
+
+  writer.Write(mtx);
 
   // save bounding box
   writer.Write(boundingSphere);
