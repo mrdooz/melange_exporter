@@ -92,6 +92,16 @@ float* AddVector(float* f, const T& v)
 }
 
 //-----------------------------------------------------------------------------
+template<typename T>
+float* AddTriangle(float* f, const T& a, const T& b, const T& c)
+{
+  f = AddVector(f, a);
+  f = AddVector(f, b);
+  f = AddVector(f, c);
+  return f;
+}
+
+//-----------------------------------------------------------------------------
 template <typename T>
 float GetFloatParam(T* obj, int paramId)
 {
@@ -233,6 +243,13 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
   float* n = mesh->normals.data();
   u32 vertOfs = 0;
 
+  const auto& AddIndices = [&](int a, int b, int c)
+  {
+    mesh->indices.push_back(a);
+    mesh->indices.push_back(b);
+    mesh->indices.push_back(c);
+  };
+
   for (int i = 0; i < numPolys; ++i)
   {
     int idx0 = polys[i].a;
@@ -242,13 +259,8 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
     bool isQuad = idx2 != idx3;
 
     // face 0, 1, 2
-    v = AddVector(v, verts[idx0]);
-    v = AddVector(v, verts[idx1]);
-    v = AddVector(v, verts[idx2]);
-
-    mesh->indices.push_back(vertOfs + 0);
-    mesh->indices.push_back(vertOfs + 1);
-    mesh->indices.push_back(vertOfs + 2);
+    v = AddTriangle(v, verts[idx0], verts[idx1], verts[idx2]);
+    AddIndices(vertOfs + 0, vertOfs + 1, vertOfs + 2);
 
     if (isQuad)
     {
@@ -256,24 +268,20 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
       if (options.makeFaceted)
       {
         // if making a faceted mesh, duplicate the shared vertices
-        v = AddVector(v, verts[idx0]);
-        v = AddVector(v, verts[idx2]);
-        v = AddVector(v, verts[idx3]);
-
-        mesh->indices.push_back(vertOfs + 3 + 0);
-        mesh->indices.push_back(vertOfs + 3 + 1);
-        mesh->indices.push_back(vertOfs + 3 + 2);
+        v = AddTriangle(v, verts[idx0], verts[idx1], verts[idx2]);
+        AddIndices(vertOfs + 3 + 0, vertOfs + 3 + 1, vertOfs + 3 + 2);
         vertOfs += 6;
       }
       else
       {
         v = AddVector(v, verts[idx3]);
-
-        mesh->indices.push_back(vertOfs + 0);
-        mesh->indices.push_back(vertOfs + 2);
-        mesh->indices.push_back(vertOfs + 3);
+        AddIndices(vertOfs + 0, vertOfs + 2, vertOfs + 3);
         vertOfs += 4;
       }
+    }
+    else
+    {
+      vertOfs += 3;
     }
 
     if (hasNormals)
@@ -282,42 +290,26 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
       {
         NormalStruct normal;
         normals->Get(normalHandle, i, normal);
-        n = AddVector(n, normal.a);
-        n = AddVector(n, normal.b);
-        n = AddVector(n, normal.c);
+        n = AddTriangle(n, normal.a, normal.b, normal.c);
 
         if (isQuad)
         {
           if (options.makeFaceted)
-          {
-            n = AddVector(n, normal.a);
-            n = AddVector(n, normal.c);
-            n = AddVector(n, normal.d);
-          }
+            n = AddTriangle(n, normal.a, normal.c, normal.d);
           else
-          {
             n = AddVector(n, normal.d);
-          }
         }
       }
       else if (hasPhongTag)
       {
-        n = AddVector(n, phongNormals[i * 4 + 0]);
-        n = AddVector(n, phongNormals[i * 4 + 1]);
-        n = AddVector(n, phongNormals[i * 4 + 2]);
+        n = AddTriangle(n, phongNormals[i * 4 + 0], phongNormals[i * 4 + 1], phongNormals[i * 4 + 2]);
 
         if (isQuad)
         {
           if (options.makeFaceted)
-          {
-            n = AddVector(n, phongNormals[i * 4 + 0]);
-            n = AddVector(n, phongNormals[i * 4 + 2]);
-            n = AddVector(n, phongNormals[i * 4 + 3]);
-          }
+            n = AddTriangle(n, phongNormals[i * 4 + 0], phongNormals[i * 4 + 2], phongNormals[i * 4 + 3]);
           else
-          {
             n = AddVector(n, phongNormals[i * 4 + 3]);
-          }
         }
       }
     }
@@ -459,7 +451,6 @@ Bool AlienPolygonObjectData::Execute()
 {
   boba::Mesh mesh((u32)scene.meshes.size());
 
-  // get object pointer
   PolygonObject* obj = (PolygonObject*)GetNode();
 
   string meshName = CopyString(obj->GetName());
@@ -469,14 +460,13 @@ Bool AlienPolygonObjectData::Execute()
   CollectMeshMaterials(obj, &mesh);
   CollectVertices(obj, &mesh);
 
-  scene.meshes.push_back(mesh);
-
-  // relative and normalized mtx
-  Matrix mtx = obj->GetRelMln();
+  Matrix mtx = obj->GetMl();
   AddVector(&mesh.mtx[0], mtx.v1);
   AddVector(&mesh.mtx[3], mtx.v2);
   AddVector(&mesh.mtx[6], mtx.v3);
   AddVector(&mesh.mtx[9], mtx.off);
+
+  scene.meshes.push_back(mesh);
 
   return true;
 }
