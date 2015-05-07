@@ -36,7 +36,7 @@ namespace boba
     string inputFilename;
     string outputFilename;
     FILE* logfile = nullptr;
-    bool makeFaceted = false;
+    bool shareVertices = true;
     int verbosity = 0;
   };
 }
@@ -79,26 +79,6 @@ R GetVectorParam(T* obj, int paramId)
   obj->GetParameter(paramId, data);
   Vector v = data.GetVector();
   return R(v.x, v.y, v.z);
-}
-
-//-----------------------------------------------------------------------------
-template<typename T>
-float* AddVector(float* f, const T& v)
-{
-  *f++ = v.x;
-  *f++ = v.y;
-  *f++ = v.z;
-  return f;
-}
-
-//-----------------------------------------------------------------------------
-template<typename T>
-float* AddTriangle(float* f, const T& a, const T& b, const T& c)
-{
-  f = AddVector(f, a);
-  f = AddVector(f, b);
-  f = AddVector(f, c);
-  return f;
 }
 
 //-----------------------------------------------------------------------------
@@ -153,6 +133,28 @@ Bool AlienPrimitiveObjectData::Execute()
   return false;
 }
 
+template <typename T>
+inline bool IsQuad(const T& p)
+{
+  return p.c != p.d;
+}
+
+void AddIndices(vector<int>* indices, int a, int b, int c)
+{
+  indices->push_back(a); indices->push_back(b); indices->push_back(c);
+};
+
+template <typename T>
+void AddVector(vector<float>* verts, const T& v)
+{
+  verts->push_back(v.x); verts->push_back(v.y); verts->push_back(v.z);
+};
+
+template <typename T>
+void AddTriangle(vector<float>* verts, const T& a, const T& b, const T& c)
+{
+  AddVector(verts, a); AddVector(verts, b); AddVector(verts, c);
+};
 
 //-----------------------------------------------------------------------------
 void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
@@ -216,10 +218,7 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
   for (int i = 0; i < numPolys; ++i)
   {
     // if the polygon is a quad, we're going to double the shared verts
-    if (polys[i].c == polys[i].d)
-      numVerts += 3;
-    else
-      numVerts += options.makeFaceted ? 2 * 3 : 4;
+    numVerts += (options.shareVertices ? 1 : 2) * (IsQuad(polys[i]) ? 4 : 3);
   }
 
   // Check what kind of normals exist
@@ -231,24 +230,15 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
   NormalTag* normals = hasNormalsTag ? (NormalTag*)obj->GetTag(Tnormal) : nullptr;
 
   // add verts
-  mesh->verts.resize(numVerts * 3);
+  mesh->verts.reserve(numVerts * 3);
   mesh->indices.reserve(numVerts * 3);
 
   if (hasNormals)
-    mesh->normals.resize(numVerts * 3);
+    mesh->normals.reserve(numVerts * 3);
 
   ConstNormalHandle normalHandle = normals ? normals->GetDataAddressR() : nullptr;
 
-  float* v = mesh->verts.data();
-  float* n = mesh->normals.data();
   u32 vertOfs = 0;
-
-  const auto& AddIndices = [&](int a, int b, int c)
-  {
-    mesh->indices.push_back(a);
-    mesh->indices.push_back(b);
-    mesh->indices.push_back(c);
-  };
 
   for (int i = 0; i < numPolys; ++i)
   {
@@ -256,27 +246,27 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
     int idx1 = polys[i].b;
     int idx2 = polys[i].c;
     int idx3 = polys[i].d;
-    bool isQuad = idx2 != idx3;
+    bool isQuad = IsQuad(polys[i]);
 
     // face 0, 1, 2
-    v = AddTriangle(v, verts[idx0], verts[idx1], verts[idx2]);
-    AddIndices(vertOfs + 0, vertOfs + 1, vertOfs + 2);
+    AddTriangle(&mesh->verts, verts[idx0], verts[idx1], verts[idx2]);
+    AddIndices(&mesh->indices, vertOfs + 0, vertOfs + 1, vertOfs + 2);
 
     if (isQuad)
     {
       // face 0, 2, 3
-      if (options.makeFaceted)
+      if (options.shareVertices)
       {
-        // if making a faceted mesh, duplicate the shared vertices
-        v = AddTriangle(v, verts[idx0], verts[idx1], verts[idx2]);
-        AddIndices(vertOfs + 3 + 0, vertOfs + 3 + 1, vertOfs + 3 + 2);
-        vertOfs += 6;
+        AddVector(&mesh->verts, verts[idx3]);
+        AddIndices(&mesh->indices, vertOfs + 0, vertOfs + 2, vertOfs + 3);
+        vertOfs += 4;
       }
       else
       {
-        v = AddVector(v, verts[idx3]);
-        AddIndices(vertOfs + 0, vertOfs + 2, vertOfs + 3);
-        vertOfs += 4;
+        // if making a faceted mesh, duplicate the shared vertices
+        AddTriangle(&mesh->verts, verts[idx0], verts[idx1], verts[idx2]);
+        AddIndices(&mesh->indices, vertOfs + 3 + 0, vertOfs + 3 + 1, vertOfs + 3 + 2);
+        vertOfs += 6;
       }
     }
     else
@@ -290,26 +280,26 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
       {
         NormalStruct normal;
         normals->Get(normalHandle, i, normal);
-        n = AddTriangle(n, normal.a, normal.b, normal.c);
+        AddTriangle(&mesh->normals, normal.a, normal.b, normal.c);
 
         if (isQuad)
         {
-          if (options.makeFaceted)
-            n = AddTriangle(n, normal.a, normal.c, normal.d);
+          if (options.shareVertices)
+            AddVector(&mesh->normals, normal.d);
           else
-            n = AddVector(n, normal.d);
+            AddTriangle(&mesh->normals, normal.a, normal.c, normal.d);
         }
       }
       else if (hasPhongTag)
       {
-        n = AddTriangle(n, phongNormals[i * 4 + 0], phongNormals[i * 4 + 1], phongNormals[i * 4 + 2]);
+        AddTriangle(&mesh->normals, phongNormals[i * 4 + 0], phongNormals[i * 4 + 1], phongNormals[i * 4 + 2]);
 
         if (isQuad)
         {
-          if (options.makeFaceted)
-            n = AddTriangle(n, phongNormals[i * 4 + 0], phongNormals[i * 4 + 2], phongNormals[i * 4 + 3]);
+          if (options.shareVertices)
+            AddVector(&mesh->normals, phongNormals[i * 4 + 3]);
           else
-            n = AddVector(n, phongNormals[i * 4 + 3]);
+            AddTriangle(&mesh->normals, phongNormals[i * 4 + 0], phongNormals[i * 4 + 2], phongNormals[i * 4 + 3]);
         }
       }
     }
@@ -461,10 +451,10 @@ Bool AlienPolygonObjectData::Execute()
   CollectVertices(obj, &mesh);
 
   Matrix mtx = obj->GetMl();
-  AddVector(&mesh.mtx[0], mtx.v1);
-  AddVector(&mesh.mtx[3], mtx.v2);
-  AddVector(&mesh.mtx[6], mtx.v3);
-  AddVector(&mesh.mtx[9], mtx.off);
+  mesh.mtx[0] = (float)mtx.v1.x;    mesh.mtx[1] = (float)mtx.v1.y;    mesh.mtx[2] = (float)mtx.v1.z;
+  mesh.mtx[3] = (float)mtx.v2.x;    mesh.mtx[4] = (float)mtx.v2.y;    mesh.mtx[5] = (float)mtx.v2.z;
+  mesh.mtx[6] = (float)mtx.v3.x;    mesh.mtx[7] = (float)mtx.v3.y;    mesh.mtx[8] = (float)mtx.v3.z;
+  mesh.mtx[9] = (float)mtx.off.x;   mesh.mtx[10] = (float)mtx.off.y;  mesh.mtx[11] = (float)mtx.off.z;
 
   scene.meshes.push_back(mesh);
 
@@ -507,7 +497,7 @@ Bool BaseDocument::CreateSceneToC4D(Bool selectedonly)
 //-----------------------------------------------------------------------------
 int ParseOptions(int argc, char** argv)
 {
-  // format is [--faceted] [--verbose N] input [output]
+  // format is [--dont-share-vertices] [--verbose N] input [output]
 
   if (argc < 2)
   {
@@ -522,9 +512,9 @@ int ParseOptions(int argc, char** argv)
 
   while (remaining)
   {
-    if (strcmp(argv[curArg], "--faceted") == 0)
+    if (strcmp(argv[curArg], "--dont-share-vertice") == 0)
     {
-      options.makeFaceted = true;
+      options.shareVertices = false;
       step(1);
     }
     else if (strcmp(argv[curArg], "--verbose") == 0)

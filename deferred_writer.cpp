@@ -1,5 +1,6 @@
 #include "deferred_writer.hpp"
 #include <assert.h>
+#include <string>
 
 using namespace boba;
 
@@ -65,20 +66,6 @@ u32 DeferredWriter::AddDeferredData(const void *data, u32 len, bool writeDataSiz
   WritePtr(0);
   return tmp;
 }
-
-// ------------------------------------------------------------------------------
-// void DeferredWriter::InjectDeferredString(const std::string& str, u32 ofs)
-// {
-//   InjectDeferredData(str.data(), (u32)str.size() + 1, false, ofs);
-// }
-// 
-// ------------------------------------------------------------------------------
-// void DeferredWriter::InjectDeferredData(const void *data, u32 len, bool writeDataSize, u32 ofs)
-// {
-//   // inject data into deferred data. this is useful if your deferred data contains
-//   // a string
-//   _deferredData.push_back(DeferredData(GetFilePos() + ofs, data, len, writeDataSize));
-// }
 
 //------------------------------------------------------------------------------
 void DeferredWriter::WriteDeferredData()
