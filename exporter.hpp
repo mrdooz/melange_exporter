@@ -30,6 +30,17 @@ namespace melange
   };
 
   //-----------------------------------------------------------------------------
+  class AlienCamera : public CameraObjectData
+  {
+    INSTANCEOF(AlienCamera, CameraObjectData)
+
+  public:
+
+    AlienCamera() : CameraObjectData() { }
+    virtual Bool Execute();
+  };
+
+  //-----------------------------------------------------------------------------
   //self defined layer with own functions and members
   class AlienLayer : public LayerObject
   {

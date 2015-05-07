@@ -91,12 +91,34 @@ float GetFloatParam(T* obj, int paramId)
 }
 
 //-----------------------------------------------------------------------------
+
 RootMaterial *AllocAlienRootMaterial()			{ return NewObj(RootMaterial); }
 RootObject *AllocAlienRootObject()					{ return NewObj(RootObject); }
 RootLayer *AllocAlienRootLayer()						{ return NewObj(RootLayer); }
 RootRenderData *AllocAlienRootRenderData()	{ return NewObj(RootRenderData); }
 RootViewPanel *AllocC4DRootViewPanel()			{ return NewObj(RootViewPanel); }
 LayerObject *AllocAlienLayer()							{ return NewObj(LayerObject); }
+
+//-----------------------------------------------------------------------------
+NodeData *AllocAlienObjectData(Int32 id, Bool &known)
+{
+  NodeData *m_data = NULL;
+  switch (id)
+  {
+    // supported element types
+    case Opolygon:  m_data = NewObj(AlienPolygonObjectData); break;
+    case Osphere:   m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Ocube:     m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Oplane:    m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Ocone:     m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Otorus:    m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Ocylinder: m_data = NewObj(AlienPrimitiveObjectData, id); break;
+    case Ocamera:   m_data = NewObj(AlienCamera); break;
+  }
+
+  known = !!m_data;
+  return m_data;
+}
 
 //-----------------------------------------------------------------------------
 Bool AlienMaterial::Execute()
@@ -109,6 +131,20 @@ Bool AlienMaterial::Execute()
 Bool AlienLayer::Execute()
 {
   Print();
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+Bool AlienCamera::Execute()
+{
+  // We want all our cameras to be children to null object, so check that here
+
+  BaseObject* obj = this;
+  GetType();
+  GeData data;
+  GetNode()->GetParameter(CAMERAOBJECT_FOV_VERTICAL, data);
+  float fov = data.GetFloat();
+  int a = 10;
   return true;
 }
 
@@ -155,6 +191,18 @@ void AddTriangle(vector<float>* verts, const T& a, const T& b, const T& c)
 {
   AddVector(verts, a); AddVector(verts, b); AddVector(verts, c);
 };
+
+//-----------------------------------------------------------------------------
+Vector CalcNormal(const Vector& a, const Vector& b, const Vector& c)
+{
+  Vector e0 = (b - a);
+  e0.Normalize();
+
+  Vector e1 = (c - a);
+  e1.Normalize();
+
+  return Cross(e0, e1);
+}
 
 //-----------------------------------------------------------------------------
 void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
@@ -231,10 +279,8 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
 
   // add verts
   mesh->verts.reserve(numVerts * 3);
+  mesh->normals.reserve(numVerts * 3);
   mesh->indices.reserve(numVerts * 3);
-
-  if (hasNormals)
-    mesh->normals.reserve(numVerts * 3);
 
   ConstNormalHandle normalHandle = normals ? normals->GetDataAddressR() : nullptr;
 
@@ -301,6 +347,19 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
           else
             AddTriangle(&mesh->normals, phongNormals[i * 4 + 0], phongNormals[i * 4 + 2], phongNormals[i * 4 + 3]);
         }
+      }
+    }
+    else
+    {
+      // no normals, so generate polygon normals and use them for all verts
+      Vector normal = CalcNormal(verts[idx0], verts[idx1], verts[idx2]);
+      AddTriangle(&mesh->normals, normal, normal, normal);
+      if (isQuad)
+      {
+        if (options.shareVertices)
+          AddVector(&mesh->normals, normal);
+        else
+          AddTriangle(&mesh->normals, normal, normal, normal);
       }
     }
   }
@@ -459,25 +518,6 @@ Bool AlienPolygonObjectData::Execute()
   scene.meshes.push_back(mesh);
 
   return true;
-}
-
-//-----------------------------------------------------------------------------
-NodeData *AllocAlienObjectData(Int32 id, Bool &known)
-{
-  NodeData *m_data = NULL;
-  switch (id)
-  {
-    // supported element types
-    case Opolygon:  m_data = NewObj(AlienPolygonObjectData); break;
-    case Osphere:   m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Ocube:     m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Oplane:    m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Ocone:     m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Otorus:    m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Ocylinder: m_data = NewObj(AlienPrimitiveObjectData, id); break;
-  }
-
-  return m_data;
 }
 
 //-----------------------------------------------------------------------------
