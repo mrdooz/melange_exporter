@@ -3,6 +3,7 @@
 #include <c4d_ctrack.h>
 
 #include "exporter.hpp"
+#include "exporter_stubs.hpp"
 #include <stdint.h>
 #include <stdio.h>
 

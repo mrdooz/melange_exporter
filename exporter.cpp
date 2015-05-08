@@ -5,6 +5,7 @@
 
 #include "exporter.hpp"
 #include "exporter_helpers.hpp"
+#include "exporter_stubs.hpp"
 #include "boba_scene.hpp"
 #include "deferred_writer.hpp"
 
@@ -18,17 +19,22 @@
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
+
 #include <time.h>
 
 //-----------------------------------------------------------------------------
 using namespace melange;
 using namespace std;
 
-namespace melange
-{
-  void PrintAnimInfo(BaseList2D *bl);
-}
+//-----------------------------------------------------------------------------
+RootMaterial *AllocAlienRootMaterial()			{ return NewObj(RootMaterial); }
+RootObject *AllocAlienRootObject()					{ return NewObj(RootObject); }
+RootLayer *AllocAlienRootLayer()						{ return NewObj(RootLayer); }
+RootRenderData *AllocAlienRootRenderData()	{ return NewObj(RootRenderData); }
+RootViewPanel *AllocC4DRootViewPanel()			{ return NewObj(RootViewPanel); }
+LayerObject *AllocAlienLayer()							{ return NewObj(LayerObject); }
 
+//-----------------------------------------------------------------------------
 namespace boba
 {
   struct Options
@@ -41,6 +47,12 @@ namespace boba
   };
 }
 
+namespace
+{
+  const u32 DEFAULT_MATERIAL = ~0u;
+}
+
+//-----------------------------------------------------------------------------
 boba::Scene scene;
 boba::Options options;
 
@@ -51,11 +63,6 @@ boba::Options options;
     fprintf(options.logfile, fmt, __VA_ARGS__);
 
 #define RANGE(c) (c).begin(), (c).end()
-
-namespace
-{
-  const u32 DEFAULT_MATERIAL = ~0u;
-}
 
 
 //-----------------------------------------------------------------------------
@@ -69,7 +76,6 @@ string CopyString(const melange::String& str)
   }
   return res;
 }
-
 
 //-----------------------------------------------------------------------------
 template <typename R, typename T>
@@ -91,101 +97,26 @@ float GetFloatParam(T* obj, int paramId)
 }
 
 //-----------------------------------------------------------------------------
-
-RootMaterial *AllocAlienRootMaterial()			{ return NewObj(RootMaterial); }
-RootObject *AllocAlienRootObject()					{ return NewObj(RootObject); }
-RootLayer *AllocAlienRootLayer()						{ return NewObj(RootLayer); }
-RootRenderData *AllocAlienRootRenderData()	{ return NewObj(RootRenderData); }
-RootViewPanel *AllocC4DRootViewPanel()			{ return NewObj(RootViewPanel); }
-LayerObject *AllocAlienLayer()							{ return NewObj(LayerObject); }
-
-//-----------------------------------------------------------------------------
-NodeData *AllocAlienObjectData(Int32 id, Bool &known)
-{
-  NodeData *m_data = NULL;
-  switch (id)
-  {
-    // supported element types
-    case Opolygon:  m_data = NewObj(AlienPolygonObjectData); break;
-    case Osphere:   m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Ocube:     m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Oplane:    m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Ocone:     m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Otorus:    m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Ocylinder: m_data = NewObj(AlienPrimitiveObjectData, id); break;
-    case Ocamera:   m_data = NewObj(AlienCamera); break;
-  }
-
-  known = !!m_data;
-  return m_data;
-}
-
-//-----------------------------------------------------------------------------
-Bool AlienMaterial::Execute()
-{
-  Print();
-  return true;
-}
-
-//-----------------------------------------------------------------------------
-Bool AlienLayer::Execute()
-{
-  Print();
-  return true;
-}
-
-//-----------------------------------------------------------------------------
-Bool AlienCamera::Execute()
-{
-  // We want all our cameras to be children to null object, so check that here
-
-  BaseObject* obj = this;
-  GetType();
-  GeData data;
-  GetNode()->GetParameter(CAMERAOBJECT_FOV_VERTICAL, data);
-  float fov = data.GetFloat();
-  int a = 10;
-  return true;
-}
-
-//-----------------------------------------------------------------------------
-Bool AlienPrimitiveObjectData::Execute()
-{
-  // decide the object type
-  if (type_id == Ocube)
-  {
-    // get the size of the cube
-    GeData cubeData;
-    GetNode()->GetParameter(PRIM_CUBE_LEN, cubeData);
-    Vector xyzLength = cubeData.GetVector();
-    // create your own parametric cube with length X, Y and Z
-    // ...
-    // returning TRUE we will NOT get another call of PolygonObjectData Execute()
-    // HACK! returning false means the object wasn't processed
-    return false;
-  }
-  // return FALSE to get a simpler geometric description of objects like Osphere, Ocone, ...
-  // the Execute() of AlienPolygonObjectData will be called
-  return false;
-}
-
 template <typename T>
 inline bool IsQuad(const T& p)
 {
   return p.c != p.d;
 }
 
+//-----------------------------------------------------------------------------
 void AddIndices(vector<int>* indices, int a, int b, int c)
 {
   indices->push_back(a); indices->push_back(b); indices->push_back(c);
 };
 
+//-----------------------------------------------------------------------------
 template <typename T>
 void AddVector(vector<float>* verts, const T& v)
 {
   verts->push_back(v.x); verts->push_back(v.y); verts->push_back(v.z);
 };
 
+//-----------------------------------------------------------------------------
 template <typename T>
 void AddTriangle(vector<float>* verts, const T& a, const T& b, const T& c)
 {
@@ -495,12 +426,55 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
   }
 }
 
+
 //-----------------------------------------------------------------------------
-Bool AlienPolygonObjectData::Execute()
+bool ExportCamera(BaseObject* baseObj, BaseObject* parentObj)
+{
+  string name(CopyString(baseObj->GetName()));
+  const char* ss = name.c_str();
+  GeData data;
+  baseObj->GetParameter(CAMERAOBJECT_FOV_VERTICAL, data);
+  int tt = data.GetType();
+  int vv = data.GetInt32();
+  float fov = data.GetFloat();
+
+  GeData camData;
+  if (baseObj->GetParameter(CAMERAOBJECT_FOV_VERTICAL, camData))
+    printf("   Vertical FOV: %f \n", Deg(camData.GetFloat()));
+
+
+  baseObj->GetParameter(CAMERA_PROJECTION, data);
+  float tmp;
+  tmp = data.GetFloat();
+
+//  auto kk = baseObj->GetDown();
+//
+  NodeData* nodeData = baseObj->GetNodeData();
+//  BaseList2D* bb = baseObj->GetNodeData()->GetNode();
+//  bb->GetParameter(CAMERAOBJECT_FOV_VERTICAL, data);
+//  float fov2 = data.GetFloat();
+
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+bool ExportLight(BaseObject* baseObj, BaseObject* parentObj)
+{
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+bool ExportNullObject(BaseObject* baseObj, BaseObject* parentObj)
+{
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+bool ExportPolygonObject(BaseObject* baseObj, BaseObject* parentObj)
 {
   boba::Mesh mesh((u32)scene.meshes.size());
 
-  PolygonObject* obj = (PolygonObject*)GetNode();
+  PolygonObject* obj = (PolygonObject*)baseObj;
 
   string meshName = CopyString(obj->GetName());
   mesh.name = meshName;
@@ -520,19 +494,6 @@ Bool AlienPolygonObjectData::Execute()
   return true;
 }
 
-//-----------------------------------------------------------------------------
-// allocate the plugin tag elements data (only few tags have additional data which is stored in a NodeData)
-NodeData *AllocAlienTagData(Int32 id, Bool &known)
-{
-  return 0;
-}
-
-//-----------------------------------------------------------------------------
-// create objects, material and layers for the new C4D scene file
-Bool BaseDocument::CreateSceneToC4D(Bool selectedonly)
-{
-  return true;
-}
 
 //-----------------------------------------------------------------------------
 int ParseOptions(int argc, char** argv)
@@ -747,6 +708,46 @@ void boba::Mesh::Save(boba::DeferredWriter& writer)
 }
 
 //-----------------------------------------------------------------------------
+bool ExportRecursive(BaseObject* root, BaseObject* parent = nullptr)
+{
+  for (BaseObject* obj = root; obj; obj = obj->GetNext())
+  {
+    printf("%s (%d)\n", CopyString(obj->GetName()).c_str(), obj->GetType());
+    switch (obj->GetType())
+    {
+      case OBJECT_POLYGON:
+        if (!ExportPolygonObject(obj, parent))
+          return false;
+        break;
+
+      case OBJECT_CAMERA:
+        if (!ExportCamera(obj, parent))
+          return false;
+        break;
+
+      case OBJECT_LIGHT:
+        if (!ExportLight(obj, parent))
+          return false;
+        break;
+
+      case OBJECT_NULL:
+        if (!ExportNullObject(obj, parent))
+          return false;
+        break;
+    }
+
+    BaseObject* child = obj->GetDown();
+    if (child)
+    {
+      if (!ExportRecursive(child, obj))
+        return false;
+    }
+  }
+
+  return true;
+}
+
+//-----------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
   if (int res = ParseOptions(argc, argv))
@@ -769,9 +770,10 @@ int main(int argc, char** argv)
     return 1;
 
   C4Dfile->Close();
-  CollectMaterials(C4Ddoc);
 
+  CollectMaterials(C4Ddoc);
   C4Ddoc->CreateSceneFromC4D();
+  ExportRecursive(C4Ddoc->GetFirstObject(), nullptr);
 
   scene.Save(options);
 
