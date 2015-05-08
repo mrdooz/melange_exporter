@@ -13,6 +13,18 @@ typedef uint8_t u8;
 
 using namespace std;
 
+namespace melange
+{
+  //-----------------------------------------------------------------------------
+  class AlienCameraObjectData : public CameraObjectData
+  {
+    INSTANCEOF(AlienCameraObjectData, CameraObjectData)
+  public:
+    AlienCameraObjectData() : CameraObjectData() {}
+    virtual Bool Execute();
+  };
+}
+
 
 namespace boba
 {
@@ -54,14 +66,32 @@ namespace boba
     float brightness;
   };
 
-  struct Light
+  struct BaseObject
+  {
+    BaseObject(melange::BaseObject* melangeObj);
+    BaseObject* parent = nullptr;
+    melange::BaseObject* melangeObj = nullptr;
+    float mtx[12];
+    string name;
+    u32 id = ~0u;
+  };
+
+  struct Light : public BaseObject
   {
     void Save(DeferredWriter& writer);
   };
 
-  struct Camera
+  struct NullObject : public BaseObject
   {
+    NullObject(melange::BaseObject* melangeObj) : BaseObject(melangeObj) {}
+  };
+
+  struct Camera : public BaseObject
+  {
+    Camera(melange::BaseObject* melangeObj) : BaseObject(melangeObj) {}
     void Save(DeferredWriter& writer);
+
+    float verticalFov;
   };
 
   struct Material
@@ -89,9 +119,9 @@ namespace boba
   };
 
   //------------------------------------------------------------------------------
-  struct Mesh
+  struct Mesh : public BaseObject
   {
-    Mesh(u32 idx) : idx(idx) {}
+    Mesh(melange::BaseObject* melangeObj) : BaseObject(melangeObj) {}
 
     struct MaterialGroup
     {
@@ -101,13 +131,10 @@ namespace boba
     };
 
     void Save(DeferredWriter& writer);
-    u32 idx;
-    string name;
     vector<float> verts;
     vector<float> normals;
     vector<float> uv;
     vector<int> indices;
-    float mtx[12];
     vector<MaterialGroup> materialGroups;
     unordered_map<u32, vector<int>> polysByMaterial;
 
@@ -119,9 +146,14 @@ namespace boba
   struct Scene
   {
     bool Save(const Options& options);
-    vector<Mesh> meshes;
-    vector<Camera> cameras;
-    vector<Light> lights;
+    boba::BaseObject* FindObject(melange::BaseObject* obj);
+    vector<Mesh*> meshes;
+    vector<Camera*> cameras;
+    vector<NullObject*> nullObjects;
+    vector<Light*> lights;
     vector<Material> materials;
+    unordered_map<melange::BaseObject*, boba::BaseObject*> objMap;
+
+    static u32 nextObjectId;
   };
 }

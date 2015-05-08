@@ -35,6 +35,27 @@ RootViewPanel *AllocC4DRootViewPanel()			{ return NewObj(RootViewPanel); }
 LayerObject *AllocAlienLayer()							{ return NewObj(LayerObject); }
 
 //-----------------------------------------------------------------------------
+NodeData *AllocAlienObjectData(Int32 id, Bool &known)
+{
+  NodeData *m_data = NULL;
+  switch (id)
+  {
+    // supported element types
+    case Opolygon:  m_data = NewObj(AlienPolygonObjectData); break;
+    case Ocamera:   m_data = NewObj(AlienCameraObjectData); break;
+    case Osphere:   m_data = NewObj(AlienPrimitiveObjectData); break;
+    case Ocube:     m_data = NewObj(AlienPrimitiveObjectData); break;
+    case Oplane:    m_data = NewObj(AlienPrimitiveObjectData); break;
+    case Ocone:     m_data = NewObj(AlienPrimitiveObjectData); break;
+    case Otorus:    m_data = NewObj(AlienPrimitiveObjectData); break;
+    case Ocylinder: m_data = NewObj(AlienPrimitiveObjectData); break;
+  }
+
+  known = !!m_data;
+  return m_data;
+}
+
+//-----------------------------------------------------------------------------
 namespace boba
 {
   struct Options
@@ -43,7 +64,7 @@ namespace boba
     string outputFilename;
     FILE* logfile = nullptr;
     bool shareVertices = true;
-    int verbosity = 0;
+    int verbosity = 1;
   };
 }
 
@@ -51,6 +72,8 @@ namespace
 {
   const u32 DEFAULT_MATERIAL = ~0u;
 }
+
+u32 boba::Scene::nextObjectId = 1;
 
 //-----------------------------------------------------------------------------
 boba::Scene scene;
@@ -75,6 +98,15 @@ string CopyString(const melange::String& str)
     DeleteMem(c);
   }
   return res;
+}
+
+//-----------------------------------------------------------------------------
+void CopyMatrix(const Matrix& mtx, float* out)
+{
+  out[0] = (float)mtx.v1.x;    out[1] = (float)mtx.v1.y;    out[2] = (float)mtx.v1.z;
+  out[3] = (float)mtx.v2.x;    out[4] = (float)mtx.v2.y;    out[5] = (float)mtx.v2.z;
+  out[6] = (float)mtx.v3.x;    out[7] = (float)mtx.v3.y;    out[8] = (float)mtx.v3.z;
+  out[9] = (float)mtx.off.x;   out[10] = (float)mtx.off.y;  out[11] = (float)mtx.off.z;
 }
 
 //-----------------------------------------------------------------------------
@@ -350,7 +382,7 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
 
   // For each material found, check if the following tag is a selection tag, in which
   // case record which polys belong to it
-    for (BaseTag* btag = obj->GetFirstTag(); btag; btag = btag->GetNext())
+  for (BaseTag* btag = obj->GetFirstTag(); btag; btag = btag->GetNext())
   {
     // texture tag
     if (btag->GetType() == Ttexture)
@@ -426,33 +458,56 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
   }
 }
 
+//-----------------------------------------------------------------------------
+boba::BaseObject::BaseObject(melange::BaseObject* melangeObj) 
+  : melangeObj(melangeObj)
+{
+  parent = scene.FindObject(melangeObj->GetUp());
+  name = CopyString(melangeObj->GetName());
+  id = Scene::nextObjectId++;
+
+  LOG(1, "Exporting: %s\n", name.c_str());
+}
 
 //-----------------------------------------------------------------------------
-bool ExportCamera(BaseObject* baseObj, BaseObject* parentObj)
+Bool AlienPolygonObjectData::Execute()
 {
-  string name(CopyString(baseObj->GetName()));
-  const char* ss = name.c_str();
+  BaseObject* baseObj = (BaseObject*)GetNode();
+  PolygonObject* obj = (PolygonObject*)baseObj;
+
+  boba::Mesh* mesh = new boba::Mesh(baseObj);
+
+  CollectMeshMaterials(obj, mesh);
+  CollectVertices(obj, mesh);
+
+  CopyMatrix(obj->GetMl(), mesh->mtx);
+  scene.meshes.push_back(mesh);
+
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+Bool AlienCameraObjectData::Execute()
+{
+  BaseObject* baseObj = (BaseObject*)GetNode();
+
+  // we require the parent object to be a null object
+  BaseObject* parent = baseObj->GetUp();
+  bool isNullParent = parent && parent->GetType() == OBJECT_NULL;
+  if (!isNullParent)
+  {
+    LOG(1, "Camera's %s parent isn't a null object!", CopyString(baseObj->GetName()).c_str());
+    return true;
+  }
+
+  boba::Camera* camera = new boba::Camera(baseObj);
+  CopyMatrix(parent->GetMl(), camera->mtx);
+
   GeData data;
   baseObj->GetParameter(CAMERAOBJECT_FOV_VERTICAL, data);
-  int tt = data.GetType();
-  int vv = data.GetInt32();
-  float fov = data.GetFloat();
+  camera->verticalFov = data.GetFloat();
 
-  GeData camData;
-  if (baseObj->GetParameter(CAMERAOBJECT_FOV_VERTICAL, camData))
-    printf("   Vertical FOV: %f \n", Deg(camData.GetFloat()));
-
-
-  baseObj->GetParameter(CAMERA_PROJECTION, data);
-  float tmp;
-  tmp = data.GetFloat();
-
-//  auto kk = baseObj->GetDown();
-//
-  NodeData* nodeData = baseObj->GetNodeData();
-//  BaseList2D* bb = baseObj->GetNodeData()->GetNode();
-//  bb->GetParameter(CAMERAOBJECT_FOV_VERTICAL, data);
-//  float fov2 = data.GetFloat();
+  scene.cameras.push_back(camera);
 
   return true;
 }
@@ -466,31 +521,6 @@ bool ExportLight(BaseObject* baseObj, BaseObject* parentObj)
 //-----------------------------------------------------------------------------
 bool ExportNullObject(BaseObject* baseObj, BaseObject* parentObj)
 {
-  return true;
-}
-
-//-----------------------------------------------------------------------------
-bool ExportPolygonObject(BaseObject* baseObj, BaseObject* parentObj)
-{
-  boba::Mesh mesh((u32)scene.meshes.size());
-
-  PolygonObject* obj = (PolygonObject*)baseObj;
-
-  string meshName = CopyString(obj->GetName());
-  mesh.name = meshName;
-  LOG(1, "Exporting: %s\n", meshName.c_str());
-
-  CollectMeshMaterials(obj, &mesh);
-  CollectVertices(obj, &mesh);
-
-  Matrix mtx = obj->GetMl();
-  mesh.mtx[0] = (float)mtx.v1.x;    mesh.mtx[1] = (float)mtx.v1.y;    mesh.mtx[2] = (float)mtx.v1.z;
-  mesh.mtx[3] = (float)mtx.v2.x;    mesh.mtx[4] = (float)mtx.v2.y;    mesh.mtx[5] = (float)mtx.v2.z;
-  mesh.mtx[6] = (float)mtx.v3.x;    mesh.mtx[7] = (float)mtx.v3.y;    mesh.mtx[8] = (float)mtx.v3.z;
-  mesh.mtx[9] = (float)mtx.off.x;   mesh.mtx[10] = (float)mtx.off.y;  mesh.mtx[11] = (float)mtx.off.z;
-
-  scene.meshes.push_back(mesh);
-
   return true;
 }
 
@@ -578,6 +608,14 @@ template<typename T, typename U> constexpr size_t offsetOf(U T::*member)
   return (char*)&((T*)nullptr->*member) - (char*)nullptr;
 }
 #endif
+
+//------------------------------------------------------------------------------
+boba::BaseObject* boba::Scene::FindObject(melange::BaseObject* obj)
+{
+  auto it = objMap.find(obj);
+  return it == objMap.end() ? nullptr : it->second;
+}
+
 //------------------------------------------------------------------------------
 bool boba::Scene::Save(const Options& options)
 {
@@ -597,18 +635,18 @@ bool boba::Scene::Save(const Options& options)
 
   header.numMeshes = (u32)meshes.size();
   header.meshDataStart = writer.GetFilePos();
-  for (Mesh& mesh : meshes)
-    mesh.Save(writer);
+  for (Mesh* mesh : meshes)
+    mesh->Save(writer);
 
   header.numLights = (u32)lights.size();
   header.lightDataStart = header.numLights ? writer.GetFilePos() : 0;
-  for (Light& light : lights)
-    light.Save(writer);
+  for (Light* light : lights)
+    light->Save(writer);
 
   header.numCameras = (u32)cameras.size();
   header.cameraDataStart = header.numCameras ? writer.GetFilePos() : 0;
-  for (Camera& camera : cameras)
-    camera.Save(writer);
+  for (Camera* camera : cameras)
+    camera->Save(writer);
 
   header.numMaterials = (u32)materials.size();
   header.materialDataStart = header.numMaterials ? writer.GetFilePos() : 0;
@@ -707,45 +745,6 @@ void boba::Mesh::Save(boba::DeferredWriter& writer)
   writer.Write(boundingSphere);
 }
 
-//-----------------------------------------------------------------------------
-bool ExportRecursive(BaseObject* root, BaseObject* parent = nullptr)
-{
-  for (BaseObject* obj = root; obj; obj = obj->GetNext())
-  {
-    printf("%s (%d)\n", CopyString(obj->GetName()).c_str(), obj->GetType());
-    switch (obj->GetType())
-    {
-      case OBJECT_POLYGON:
-        if (!ExportPolygonObject(obj, parent))
-          return false;
-        break;
-
-      case OBJECT_CAMERA:
-        if (!ExportCamera(obj, parent))
-          return false;
-        break;
-
-      case OBJECT_LIGHT:
-        if (!ExportLight(obj, parent))
-          return false;
-        break;
-
-      case OBJECT_NULL:
-        if (!ExportNullObject(obj, parent))
-          return false;
-        break;
-    }
-
-    BaseObject* child = obj->GetDown();
-    if (child)
-    {
-      if (!ExportRecursive(child, obj))
-        return false;
-    }
-  }
-
-  return true;
-}
 
 //-----------------------------------------------------------------------------
 int main(int argc, char** argv)
@@ -773,8 +772,6 @@ int main(int argc, char** argv)
 
   CollectMaterials(C4Ddoc);
   C4Ddoc->CreateSceneFromC4D();
-  ExportRecursive(C4Ddoc->GetFirstObject(), nullptr);
-
   scene.Save(options);
 
   DeleteObj(C4Ddoc);
