@@ -5,7 +5,6 @@
 
 #include "exporter.hpp"
 #include "exporter_helpers.hpp"
-#include "exporter_stubs.hpp"
 #include "boba_scene.hpp"
 #include "deferred_writer.hpp"
 
@@ -26,54 +25,15 @@
 using namespace melange;
 using namespace std;
 
-//-----------------------------------------------------------------------------
-RootMaterial *AllocAlienRootMaterial()			{ return NewObj(RootMaterial); }
-RootObject *AllocAlienRootObject()					{ return NewObj(RootObject); }
-RootLayer *AllocAlienRootLayer()						{ return NewObj(RootLayer); }
-RootRenderData *AllocAlienRootRenderData()	{ return NewObj(RootRenderData); }
-RootViewPanel *AllocC4DRootViewPanel()			{ return NewObj(RootViewPanel); }
-LayerObject *AllocAlienLayer()							{ return NewObj(LayerObject); }
-
-//-----------------------------------------------------------------------------
-NodeData *AllocAlienObjectData(Int32 id, Bool &known)
-{
-  NodeData *m_data = NULL;
-  switch (id)
-  {
-    // supported element types
-    case Opolygon:  m_data = NewObj(AlienPolygonObjectData); break;
-    case Ocamera:   m_data = NewObj(AlienCameraObjectData); break;
-    case Osphere:   m_data = NewObj(AlienPrimitiveObjectData); break;
-    case Ocube:     m_data = NewObj(AlienPrimitiveObjectData); break;
-    case Oplane:    m_data = NewObj(AlienPrimitiveObjectData); break;
-    case Ocone:     m_data = NewObj(AlienPrimitiveObjectData); break;
-    case Otorus:    m_data = NewObj(AlienPrimitiveObjectData); break;
-    case Ocylinder: m_data = NewObj(AlienPrimitiveObjectData); break;
-  }
-
-  known = !!m_data;
-  return m_data;
-}
-
-//-----------------------------------------------------------------------------
-namespace boba
-{
-  struct Options
-  {
-    string inputFilename;
-    string outputFilename;
-    FILE* logfile = nullptr;
-    bool shareVertices = true;
-    int verbosity = 1;
-  };
-}
-
 namespace
 {
   const u32 DEFAULT_MATERIAL = ~0u;
 }
 
+//-----------------------------------------------------------------------------
+
 u32 boba::Scene::nextObjectId = 1;
+extern bool SaveScene(const boba::Scene& scene, const boba::Options& options);
 
 //-----------------------------------------------------------------------------
 boba::Scene scene;
@@ -344,8 +304,8 @@ void CollectMaterials(AlienBaseDocument* c4dDoc)
     // check if the material is a standard material
     if (mat->GetType() == Mmaterial)
     {
-      scene.materials.push_back(boba::Material());
-      boba::Material& exporterMaterial = scene.materials.back();
+      scene.materials.push_back(new boba::Material());
+      boba::Material& exporterMaterial = *scene.materials.back();
       exporterMaterial.mat = mat;
       exporterMaterial.name = CopyString(name);
 
@@ -392,14 +352,14 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
       if (!mat)
         continue;
 
-      auto materialIt = find_if(RANGE(scene.materials), [mat](const boba::Material &m) { return m.mat == mat; });
+      auto materialIt = find_if(RANGE(scene.materials), [mat](const boba::Material* m) { return m->mat == mat; });
       if (materialIt == scene.materials.end())
         continue;
 
-      boba::Material &bobaMaterial = *materialIt;
-      prevMaterial = bobaMaterial.id;
+      boba::Material* bobaMaterial = *materialIt;
+      prevMaterial = bobaMaterial->id;
       if (firstMaterial == ~0u)
-        firstMaterial = bobaMaterial.id;
+        firstMaterial = bobaMaterial->id;
     }
 
     // Polygon Selection Tag
@@ -453,7 +413,7 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
 
   for (auto g : mesh->polysByMaterial)
   {
-    const char* materialName = g.first == DEFAULT_MATERIAL ? "<default>" : scene.materials[g.first].name.c_str();
+    const char* materialName = g.first == DEFAULT_MATERIAL ? "<default>" : scene.materials[g.first]->name.c_str();
     LOG(2, "material: %s, %d polys\n", materialName, (int)g.second.size());
   }
 }
@@ -465,6 +425,7 @@ boba::BaseObject::BaseObject(melange::BaseObject* melangeObj)
   parent = scene.FindObject(melangeObj->GetUp());
   name = CopyString(melangeObj->GetName());
   id = Scene::nextObjectId++;
+  scene.objMap[melangeObj] = this;
 
   LOG(1, "Exporting: %s\n", name.c_str());
 }
@@ -496,8 +457,16 @@ Bool AlienCameraObjectData::Execute()
   bool isNullParent = parent && parent->GetType() == OBJECT_NULL;
   if (!isNullParent)
   {
-    LOG(1, "Camera's %s parent isn't a null object!", CopyString(baseObj->GetName()).c_str());
-    return true;
+    LOG(1, "Camera's %s parent isn't a null object!\n", CopyString(baseObj->GetName()).c_str());
+    return false;
+  }
+
+  // and let's make sure that we've seen the parent object
+  boba::BaseObject* bobaParent = scene.FindObject(parent);
+  if (!bobaParent)
+  {
+    LOG(1, "Parent object hasn't been processed before child (%s)\n", CopyString(baseObj->GetName()).c_str());
+    return false;
   }
 
   boba::Camera* camera = new boba::Camera(baseObj);
@@ -513,17 +482,17 @@ Bool AlienCameraObjectData::Execute()
 }
 
 //-----------------------------------------------------------------------------
-bool ExportLight(BaseObject* baseObj, BaseObject* parentObj)
+bool AlienNullObjectData::Execute()
 {
+  BaseObject* baseObj = (BaseObject*)GetNode();
+
+  boba::NullObject* nullObject = new boba::NullObject(baseObj);
+  CopyMatrix(baseObj->GetMl(), nullObject->mtx);
+
+  scene.nullObjects.push_back(nullObject);
+
   return true;
 }
-
-//-----------------------------------------------------------------------------
-bool ExportNullObject(BaseObject* baseObj, BaseObject* parentObj)
-{
-  return true;
-}
-
 
 //-----------------------------------------------------------------------------
 int ParseOptions(int argc, char** argv)
@@ -616,136 +585,6 @@ boba::BaseObject* boba::Scene::FindObject(melange::BaseObject* obj)
   return it == objMap.end() ? nullptr : it->second;
 }
 
-//------------------------------------------------------------------------------
-bool boba::Scene::Save(const Options& options)
-{
-  boba::DeferredWriter writer;
-  if (!writer.Open(options.outputFilename.c_str()))
-    return false;
-
-  boba::SceneBlob header;
-  memset(&header, 0, sizeof(header));
-  header.id[0] = 'b';
-  header.id[1] = 'o';
-  header.id[2] = 'b';
-  header.id[3] = 'a';
-
-  // dummy write the header
-  writer.Write(header);
-
-  header.numMeshes = (u32)meshes.size();
-  header.meshDataStart = writer.GetFilePos();
-  for (Mesh* mesh : meshes)
-    mesh->Save(writer);
-
-  header.numLights = (u32)lights.size();
-  header.lightDataStart = header.numLights ? writer.GetFilePos() : 0;
-  for (Light* light : lights)
-    light->Save(writer);
-
-  header.numCameras = (u32)cameras.size();
-  header.cameraDataStart = header.numCameras ? writer.GetFilePos() : 0;
-  for (Camera* camera : cameras)
-    camera->Save(writer);
-
-  header.numMaterials = (u32)materials.size();
-  header.materialDataStart = header.numMaterials ? writer.GetFilePos() : 0;
-  for (Material& material : materials)
-    material.Save(writer);
-
-  header.fixupOffset = (u32)writer.GetFilePos();
-  writer.WriteDeferredData();
-
-  // write back the correct header
-  writer.SetFilePos(0);
-  writer.Write(header);
-
-  return true;
-}
-
-//------------------------------------------------------------------------------
-void boba::Material::Save(DeferredWriter& writer)
-{
-  writer.StartBlockMarker();
-
-  writer.AddDeferredString(name);
-  writer.Write(id);
-  writer.Write(flags);
-
-  u32 colorFixup = (flags & FLAG_COLOR) ? writer.CreateFixup() : ~0u;
-  writer.WritePtr(0);
-
-  u32 luminanceFixup = (flags & FLAG_LUMINANCE) ? writer.CreateFixup() : ~0u;
-  writer.WritePtr(0);
-
-  u32 reflectionFixup = (flags & FLAG_REFLECTION) ? writer.CreateFixup() : ~0u;
-  writer.WritePtr(0);
-
-  if (flags & FLAG_COLOR)
-  {
-    writer.InsertFixup(colorFixup);
-    writer.Write(color.color);
-    writer.AddDeferredString(color.texture);
-    writer.Write(color.brightness);
-  }
-
-  if (flags & FLAG_LUMINANCE)
-  {
-    writer.InsertFixup(luminanceFixup);
-    writer.Write(luminance.color);
-    writer.AddDeferredString(luminance.texture);
-    writer.Write(luminance.brightness);
-  }
-
-  if (flags & FLAG_REFLECTION)
-  {
-    writer.InsertFixup(reflectionFixup);
-    writer.Write(reflection.color);
-    writer.AddDeferredString(reflection.texture);
-    writer.Write(reflection.brightness);
-  }
-
-  writer.EndBlockMarker();
-}
-
-//------------------------------------------------------------------------------
-void boba::Light::Save(DeferredWriter& writer)
-{
-
-}
-
-//------------------------------------------------------------------------------
-void boba::Camera::Save(DeferredWriter& writer)
-{
-
-}
-
-//------------------------------------------------------------------------------
-void boba::Mesh::Save(boba::DeferredWriter& writer)
-{
-  writer.AddDeferredString(name);
-
-  // Note, divide by 3 here to write # verts, and not # floats
-  writer.Write((u32)verts.size() / 3);
-  writer.Write((u32)indices.size());
-
-  // write the material groups
-  writer.Write((u32)materialGroups.size());
-  writer.AddDeferredVector(materialGroups);
-
-  writer.AddDeferredVector(verts);
-  writer.AddDeferredVector(normals);
-  writer.AddDeferredVector(uv);
-
-  writer.AddDeferredVector(indices);
-
-  writer.Write(mtx);
-
-  // save bounding box
-  writer.Write(boundingSphere);
-}
-
-
 //-----------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
@@ -772,7 +611,7 @@ int main(int argc, char** argv)
 
   CollectMaterials(C4Ddoc);
   C4Ddoc->CreateSceneFromC4D();
-  scene.Save(options);
+  SaveScene(scene, options);
 
   DeleteObj(C4Ddoc);
   DeleteObj(C4Dfile);

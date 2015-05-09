@@ -13,21 +13,17 @@ typedef uint8_t u8;
 
 using namespace std;
 
-namespace melange
-{
-  //-----------------------------------------------------------------------------
-  class AlienCameraObjectData : public CameraObjectData
-  {
-    INSTANCEOF(AlienCameraObjectData, CameraObjectData)
-  public:
-    AlienCameraObjectData() : CameraObjectData() {}
-    virtual Bool Execute();
-  };
-}
-
-
 namespace boba
 {
+  struct Options
+  {
+    string inputFilename;
+    string outputFilename;
+    FILE* logfile = nullptr;
+    bool shareVertices = true;
+    int verbosity = 1;
+  };
+
   class DeferredWriter;
   //------------------------------------------------------------------------------
   template <typename T>
@@ -78,7 +74,6 @@ namespace boba
 
   struct Light : public BaseObject
   {
-    void Save(DeferredWriter& writer);
   };
 
   struct NullObject : public BaseObject
@@ -89,7 +84,6 @@ namespace boba
   struct Camera : public BaseObject
   {
     Camera(melange::BaseObject* melangeObj) : BaseObject(melangeObj) {}
-    void Save(DeferredWriter& writer);
 
     float verticalFov;
   };
@@ -104,7 +98,6 @@ namespace boba
     };
 
     Material() : flags(0), mat(nullptr), id(nextId++) {}
-    void Save(DeferredWriter& writer);
 
     string name;
     u32 flags;
@@ -130,7 +123,6 @@ namespace boba
       u32 numIndices = ~0u;
     };
 
-    void Save(DeferredWriter& writer);
     vector<float> verts;
     vector<float> normals;
     vector<float> uv;
@@ -145,13 +137,12 @@ namespace boba
   struct Options;
   struct Scene
   {
-    bool Save(const Options& options);
     boba::BaseObject* FindObject(melange::BaseObject* obj);
     vector<Mesh*> meshes;
     vector<Camera*> cameras;
     vector<NullObject*> nullObjects;
     vector<Light*> lights;
-    vector<Material> materials;
+    vector<Material*> materials;
     unordered_map<melange::BaseObject*, boba::BaseObject*> objMap;
 
     static u32 nextObjectId;
