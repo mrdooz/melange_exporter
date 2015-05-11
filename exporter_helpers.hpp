@@ -82,6 +82,14 @@ namespace melange
     virtual Bool Execute();
   };
 
+  //-----------------------------------------------------------------------------
+  class AlienLightObjectData : public LightObjectData
+  {
+    INSTANCEOF(AlienLightObjectData, LightObjectData)
+  public:
+    virtual Bool Execute();
+  };
+
 }
 
 // overload this function and fill in your own unique data

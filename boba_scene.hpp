@@ -4,8 +4,9 @@
 typedef uint32_t u32;
 
 // This is the actual binary format saved on disk
-namespace boba
+namespace protocol
 {
+#pragma pack(push, 1)
   struct SceneBlob
   {
     char id[4];
@@ -37,8 +38,8 @@ namespace boba
     struct MaterialGroup
     {
       u32 materialId;
-      u32 startTri;
-      u32 numTris;
+      u32 startIndex;
+      u32 numIndices;
     };
 
     u32 numVerts;
@@ -49,7 +50,6 @@ namespace boba
     float* normals;
     float* uv;
     u32* indices;
-
 
     // bounding sphere
     float sx, sy, sz, r;
@@ -62,7 +62,15 @@ namespace boba
 
   struct CameraBlob : public BlobBase
   {
+    float verticalFov;
+    float nearPlane, farPlane;
+  };
 
+  struct LightBlob : public BlobBase
+  {
+    int type;
+    float colorRgb[3];
+    float intensity;
   };
 
   struct MaterialBlob
@@ -82,4 +90,6 @@ namespace boba
     MaterialComponent* luminance;
     MaterialComponent* reflection;
   };
+#pragma pack(pop)
+
 }

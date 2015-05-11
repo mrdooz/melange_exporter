@@ -163,14 +163,12 @@
     <ClCompile Include="..\deferred_writer.cpp" />
     <ClCompile Include="..\exporter.cpp" />
     <ClCompile Include="..\exporter_helpers.cpp" />
-    <ClCompile Include="..\exporter_stubs.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\boba_scene.hpp" />
     <ClInclude Include="..\deferred_writer.hpp" />
     <ClInclude Include="..\exporter.hpp" />
     <ClInclude Include="..\exporter_helpers.hpp" />
-    <ClInclude Include="..\exporter_stubs.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

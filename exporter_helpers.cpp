@@ -33,6 +33,7 @@ NodeData *AllocAlienObjectData(Int32 id, Bool &known)
     case Opolygon:  m_data = NewObj(AlienPolygonObjectData); break;
     case Ocamera:   m_data = NewObj(AlienCameraObjectData); break;
     case Onull:     m_data = NewObj(AlienNullObjectData); break;
+    case Olight:    m_data = NewObj(AlienLightObjectData); break;
     case Osphere:   m_data = NewObj(AlienPrimitiveObjectData); break;
     case Ocube:     m_data = NewObj(AlienPrimitiveObjectData); break;
     case Oplane:    m_data = NewObj(AlienPrimitiveObjectData); break;
@@ -60,7 +61,7 @@ Bool BaseDocument::CreateSceneToC4D(Bool selectedonly)
   return true;
 }
 
-
+//-----------------------------------------------------------------------------
 namespace melange
 {
   // memory allocation functions inside _melange_ namespace (if you have your own memory management you can overload these functions)

@@ -28,6 +28,8 @@ using namespace std;
 namespace
 {
   const u32 DEFAULT_MATERIAL = ~0u;
+  const float DEFAULT_NEAR_PLANE = 1.f;
+  const float DEFAULT_FAR_PLANE = 1000.f;
 }
 
 //-----------------------------------------------------------------------------
@@ -86,6 +88,15 @@ float GetFloatParam(T* obj, int paramId)
   GeData data;
   obj->GetParameter(paramId, data);
   return (float)data.GetFloat();
+}
+
+//-----------------------------------------------------------------------------
+template <typename T>
+int GetInt32Param(T* obj, int paramId)
+{
+  GeData data;
+  obj->GetParameter(paramId, data);
+  return (float)data.GetInt32();
 }
 
 //-----------------------------------------------------------------------------
@@ -294,41 +305,45 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
 //-----------------------------------------------------------------------------
 void CollectMaterials(AlienBaseDocument* c4dDoc)
 {
-  // get the first material from the document and go through the whole list
-  BaseMaterial* mat = c4dDoc->GetFirstMaterial();
-  while (mat)
+
+  // add default material
+  scene.materials.push_back(new boba::Material());
+  boba::Material* exporterMaterial = scene.materials.back();
+  exporterMaterial->mat = nullptr;
+  exporterMaterial->name = "<default>";
+  exporterMaterial->id = ~0u;
+  exporterMaterial->flags = boba::Material::FLAG_COLOR;
+  exporterMaterial->color.brightness = 1.f;
+  exporterMaterial->color.color = boba::Color(0.5f, 0.5f, 0.5f);
+
+
+  for (BaseMaterial* mat = c4dDoc->GetFirstMaterial(); mat; mat = mat->GetNext())
   {
-    // basic data
-    String name = mat->GetName();
-
     // check if the material is a standard material
-    if (mat->GetType() == Mmaterial)
+    if (mat->GetType() != Mmaterial)
+      continue;
+
+    string name = CopyString(mat->GetName());
+
+    scene.materials.push_back(new boba::Material());
+    boba::Material* exporterMaterial = scene.materials.back();
+    exporterMaterial->mat = mat;
+    exporterMaterial->name = name;
+
+    // check if the given channel is used in the material
+    if (((melange::Material*)mat)->GetChannelState(CHANNEL_COLOR))
     {
-      scene.materials.push_back(new boba::Material());
-      boba::Material& exporterMaterial = *scene.materials.back();
-      exporterMaterial.mat = mat;
-      exporterMaterial.name = CopyString(name);
-
-      // check if the given channel is used in the material
-      if (((melange::Material*)mat)->GetChannelState(CHANNEL_COLOR))
-      {
-        exporterMaterial.flags |= boba::Material::FLAG_COLOR;
-
-        exporterMaterial.color.brightness = GetFloatParam(mat, MATERIAL_COLOR_BRIGHTNESS);
-        exporterMaterial.color.color = GetVectorParam<boba::Color>(mat, MATERIAL_COLOR_COLOR);
-      }
-
-      if (((melange::Material*)mat)->GetChannelState(CHANNEL_REFLECTION))
-      {
-        exporterMaterial.flags |= boba::Material::FLAG_REFLECTION;
-
-        exporterMaterial.reflection.brightness = GetFloatParam(mat, MATERIAL_REFLECTION_BRIGHTNESS);
-        exporterMaterial.reflection.color = GetVectorParam<boba::Color>(mat, MATERIAL_REFLECTION_COLOR);
-      }
-
+      exporterMaterial->flags |= boba::Material::FLAG_COLOR;
+      exporterMaterial->color.brightness = GetFloatParam(mat, MATERIAL_COLOR_BRIGHTNESS);
+      exporterMaterial->color.color = GetVectorParam<boba::Color>(mat, MATERIAL_COLOR_COLOR);
     }
 
-    mat = mat->GetNext();
+    if (((melange::Material*)mat)->GetChannelState(CHANNEL_REFLECTION))
+    {
+      exporterMaterial->flags |= boba::Material::FLAG_REFLECTION;
+      exporterMaterial->reflection.brightness = GetFloatParam(mat, MATERIAL_REFLECTION_BRIGHTNESS);
+      exporterMaterial->reflection.color = GetVectorParam<boba::Color>(mat, MATERIAL_REFLECTION_COLOR);
+    }
   }
 }
 
@@ -421,13 +436,18 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
 //-----------------------------------------------------------------------------
 boba::BaseObject::BaseObject(melange::BaseObject* melangeObj) 
   : melangeObj(melangeObj)
+  , parent(scene.FindObject(melangeObj->GetUp()))
+  , name(CopyString(melangeObj->GetName()))
+  , id(Scene::nextObjectId++)
 {
-  parent = scene.FindObject(melangeObj->GetUp());
-  name = CopyString(melangeObj->GetName());
-  id = Scene::nextObjectId++;
-  scene.objMap[melangeObj] = this;
-
   LOG(1, "Exporting: %s\n", name.c_str());
+  melange::BaseObject* melangeParent = melangeObj->GetUp();
+  if ((!!melangeParent) ^ (!!parent))
+  {
+    LOG(1, "  Unable to find parent! (%s)\n", melangeParent ? CopyString(melangeParent->GetName()).c_str() : "");
+  }
+
+  scene.objMap[melangeObj] = this;
 }
 
 //-----------------------------------------------------------------------------
@@ -451,33 +471,34 @@ Bool AlienPolygonObjectData::Execute()
 Bool AlienCameraObjectData::Execute()
 {
   BaseObject* baseObj = (BaseObject*)GetNode();
+  const string name = CopyString(baseObj->GetName());
 
   // we require the parent object to be a null object
   BaseObject* parent = baseObj->GetUp();
   bool isNullParent = parent && parent->GetType() == OBJECT_NULL;
   if (!isNullParent)
   {
-    LOG(1, "Camera's %s parent isn't a null object!\n", CopyString(baseObj->GetName()).c_str());
+    LOG(1, "Camera's %s parent isn't a null object!\n", name.c_str());
     return false;
   }
 
-  // and let's make sure that we've seen the parent object
-  boba::BaseObject* bobaParent = scene.FindObject(parent);
-  if (!bobaParent)
+  int projectionType = GetInt32Param(baseObj, CAMERA_PROJECTION);
+  if (projectionType != Pperspective)
   {
-    LOG(1, "Parent object hasn't been processed before child (%s)\n", CopyString(baseObj->GetName()).c_str());
+    LOG(2, "Skipping camera (%s) with unsupported projection type (%d)\n", name.c_str(), projectionType);
     return false;
   }
 
   boba::Camera* camera = new boba::Camera(baseObj);
-  CopyMatrix(parent->GetMl(), camera->mtx);
+  CopyMatrix(baseObj->GetMl(), camera->mtx);
 
-  GeData data;
-  baseObj->GetParameter(CAMERAOBJECT_FOV_VERTICAL, data);
-  camera->verticalFov = data.GetFloat();
+  camera->verticalFov = GetFloatParam(baseObj, CAMERAOBJECT_FOV_VERTICAL);
+  camera->nearPlane = GetInt32Param(baseObj, CAMERAOBJECT_NEAR_CLIPPING_ENABLE) ?
+    max(DEFAULT_NEAR_PLANE, GetFloatParam(baseObj, CAMERAOBJECT_NEAR_CLIPPING)) : DEFAULT_NEAR_PLANE;
+  camera->farPlane = GetInt32Param(baseObj, CAMERAOBJECT_FAR_CLIPPING_ENABLE) ?
+    GetFloatParam(baseObj, CAMERAOBJECT_FAR_CLIPPING) : DEFAULT_FAR_PLANE;
 
   scene.cameras.push_back(camera);
-
   return true;
 }
 
@@ -490,6 +511,31 @@ bool AlienNullObjectData::Execute()
   CopyMatrix(baseObj->GetMl(), nullObject->mtx);
 
   scene.nullObjects.push_back(nullObject);
+
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+bool AlienLightObjectData::Execute()
+{
+  BaseObject* baseObj = (BaseObject*)GetNode();
+  const string name = CopyString(baseObj->GetName());
+
+  int lightType = GetInt32Param(baseObj, LIGHT_TYPE);
+  if (lightType != LIGHT_TYPE_OMNI)
+  {
+    LOG(1, "Only omni lights are supported: %s\n", name.c_str());
+    return true;
+  }
+
+  boba::Light* light = new boba::Light(baseObj);
+  CopyMatrix(baseObj->GetMl(), light->mtx);
+
+  light->type = GetInt32Param(baseObj, LIGHT_TYPE);
+  light->color = GetVectorParam<boba::Color>(baseObj, LIGHT_COLOR);
+  light->intensity = GetFloatParam(baseObj, LIGHT_BRIGHTNESS);
+
+  scene.lights.push_back(light);
 
   return true;
 }
@@ -591,12 +637,14 @@ int main(int argc, char** argv)
   if (int res = ParseOptions(argc, argv))
     return res;
 
-  time_t t = time(0);   // get time now
-  struct tm* now = localtime(&t);
+  {
+    time_t t = time(0);
+    struct tm* now = localtime(&t);
 
-  LOG(1, "=========================================================\n[%.4d:%.2d:%.2d-%.2d:%.2d:%.2d] %s -> %s\n",
-    now->tm_year + 1900, now->tm_mon + 1, now->tm_mday, now->tm_hour, now->tm_min, now->tm_sec,
-    options.inputFilename.c_str(), options.outputFilename.c_str());
+    LOG(1, "==] STARTING [=================================] %.4d:%.2d:%.2d-%.2d:%.2d:%.2d ]==\n%s -> %s\n",
+      now->tm_year + 1900, now->tm_mon + 1, now->tm_mday, now->tm_hour, now->tm_min, now->tm_sec,
+      options.inputFilename.c_str(), options.outputFilename.c_str());
+  }
   
   AlienBaseDocument *C4Ddoc = NewObj(AlienBaseDocument);
   HyperFile *C4Dfile = NewObj(HyperFile);
@@ -615,6 +663,15 @@ int main(int argc, char** argv)
 
   DeleteObj(C4Ddoc);
   DeleteObj(C4Dfile);
+
+  {
+    time_t t = time(0);
+    struct tm* now = localtime(&t);
+
+    LOG(1, "==] DONE [=====================================] %.4d:%.2d:%.2d-%.2d:%.2d:%.2d ]==\n",
+      now->tm_year + 1900, now->tm_mon + 1, now->tm_mday, now->tm_hour, now->tm_min, now->tm_sec);
+  }
+
 
   if (options.logfile)
     fclose(options.logfile);

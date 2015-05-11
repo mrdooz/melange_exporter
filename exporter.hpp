@@ -41,9 +41,9 @@ namespace boba
   //------------------------------------------------------------------------------
   struct Color
   {
-    Color(float r, float g, float b) : r(r), g(g), b(b), a(1) {}
-    Color() : r(0), g(0), b(0), a(1) {}
-    float r, g, b, a;
+    Color(float r, float g, float b) : r(r), g(g), b(b) {}
+    Color() : r(0), g(0), b(0) {}
+    float r, g, b;
   };
 
   //------------------------------------------------------------------------------
@@ -65,8 +65,9 @@ namespace boba
   struct BaseObject
   {
     BaseObject(melange::BaseObject* melangeObj);
-    BaseObject* parent = nullptr;
+
     melange::BaseObject* melangeObj = nullptr;
+    BaseObject* parent = nullptr;
     float mtx[12];
     string name;
     u32 id = ~0u;
@@ -74,6 +75,10 @@ namespace boba
 
   struct Light : public BaseObject
   {
+    Light(melange::BaseObject* melangeObj) : BaseObject(melangeObj) {}
+    Color color;
+    float intensity;
+    int type;
   };
 
   struct NullObject : public BaseObject
@@ -86,6 +91,7 @@ namespace boba
     Camera(melange::BaseObject* melangeObj) : BaseObject(melangeObj) {}
 
     float verticalFov;
+    float nearPlane, farPlane;
   };
 
   struct Material

@@ -17,7 +17,7 @@ bool SaveScene(const Scene& scene, const Options& options)
   if (!writer.Open(options.outputFilename.c_str()))
     return false;
 
-  boba::SceneBlob header;
+  protocol::SceneBlob header;
   memset(&header, 0, sizeof(header));
   header.id[0] = 'b';
   header.id[1] = 'o';
@@ -143,12 +143,20 @@ void SaveMesh(const Mesh* mesh, DeferredWriter& writer)
 void SaveCamera(const Camera* camera, DeferredWriter& writer)
 {
   SaveBase(camera, writer);
+
+  writer.Write(camera->verticalFov);
+  writer.Write(camera->nearPlane);
+  writer.Write(camera->farPlane);
 }
 
 //------------------------------------------------------------------------------
 void SaveLight(const Light* light, DeferredWriter& writer)
 {
   SaveBase(light, writer);
+  
+  writer.Write(light->type);
+  writer.Write(light->color);
+  writer.Write(light->intensity);
 }
 
 //------------------------------------------------------------------------------
