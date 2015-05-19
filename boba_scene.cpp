@@ -113,7 +113,8 @@ void SaveBase(const BaseObject* base, DeferredWriter& writer)
   writer.AddDeferredString(base->name);
   writer.Write(base->id);
   writer.Write(base->parent ? base->parent->id : (u32)~0u);
-  writer.Write(base->mtx);
+  writer.Write(base->mtxLocal);
+  writer.Write(base->mtxGlobal);
 }
 
 //------------------------------------------------------------------------------

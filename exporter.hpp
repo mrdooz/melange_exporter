@@ -68,7 +68,8 @@ namespace boba
 
     melange::BaseObject* melangeObj = nullptr;
     BaseObject* parent = nullptr;
-    float mtx[12];
+    float mtxLocal[12];
+    float mtxGlobal[12];
     string name;
     u32 id = ~0u;
   };

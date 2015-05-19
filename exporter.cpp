@@ -461,7 +461,8 @@ Bool AlienPolygonObjectData::Execute()
   CollectMeshMaterials(obj, mesh);
   CollectVertices(obj, mesh);
 
-  CopyMatrix(obj->GetMl(), mesh->mtx);
+  CopyMatrix(obj->GetMl(), mesh->mtxLocal);
+  CopyMatrix(obj->GetMg(), mesh->mtxGlobal);
   scene.meshes.push_back(mesh);
 
   return true;
@@ -490,7 +491,8 @@ Bool AlienCameraObjectData::Execute()
   }
 
   boba::Camera* camera = new boba::Camera(baseObj);
-  CopyMatrix(baseObj->GetMl(), camera->mtx);
+  CopyMatrix(baseObj->GetMl(), camera->mtxLocal);
+  CopyMatrix(baseObj->GetMg(), camera->mtxGlobal);
 
   camera->verticalFov = GetFloatParam(baseObj, CAMERAOBJECT_FOV_VERTICAL);
   camera->nearPlane = GetInt32Param(baseObj, CAMERAOBJECT_NEAR_CLIPPING_ENABLE) ?
@@ -508,7 +510,9 @@ bool AlienNullObjectData::Execute()
   BaseObject* baseObj = (BaseObject*)GetNode();
 
   boba::NullObject* nullObject = new boba::NullObject(baseObj);
-  CopyMatrix(baseObj->GetMl(), nullObject->mtx);
+  CopyMatrix(baseObj->GetMl(), nullObject->mtxLocal);
+  CopyMatrix(baseObj->GetMg(), nullObject->mtxGlobal);
+
 
   scene.nullObjects.push_back(nullObject);
 
@@ -529,7 +533,8 @@ bool AlienLightObjectData::Execute()
   }
 
   boba::Light* light = new boba::Light(baseObj);
-  CopyMatrix(baseObj->GetMl(), light->mtx);
+  CopyMatrix(baseObj->GetMl(), light->mtxLocal);
+  CopyMatrix(baseObj->GetMg(), light->mtxGlobal);
 
   light->type = GetInt32Param(baseObj, LIGHT_TYPE);
   light->color = GetVectorParam<boba::Color>(baseObj, LIGHT_COLOR);
