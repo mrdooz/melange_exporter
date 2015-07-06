@@ -114,16 +114,30 @@ void AddIndices(vector<int>* indices, int a, int b, int c)
 
 //-----------------------------------------------------------------------------
 template <typename T>
-void AddVector(vector<float>* verts, const T& v)
+void AddVector2(vector<float>* out, const T& v)
 {
-  verts->push_back(v.x); verts->push_back(v.y); verts->push_back(v.z);
+  out->push_back(v.x); out->push_back(v.y);
 };
 
 //-----------------------------------------------------------------------------
 template <typename T>
-void AddTriangle(vector<float>* verts, const T& a, const T& b, const T& c)
+void AddVector3(vector<float>* out, const T& v)
 {
-  AddVector(verts, a); AddVector(verts, b); AddVector(verts, c);
+  out->push_back(v.x); out->push_back(v.y); out->push_back(v.z);
+};
+
+//-----------------------------------------------------------------------------
+template <typename T>
+void Add3Vector2(vector<float>* out, const T& a, const T& b, const T& c)
+{
+  AddVector2(out, a); AddVector2(out, b); AddVector2(out, c);
+};
+
+//-----------------------------------------------------------------------------
+template <typename T>
+void Add3Vector3(vector<float>* out, const T& a, const T& b, const T& c)
+{
+  AddVector3(out, a); AddVector3(out, b); AddVector3(out, c);
 };
 
 //-----------------------------------------------------------------------------
@@ -210,11 +224,14 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
 
   Vector32* phongNormals = hasPhongTag ? obj->CreatePhongNormals() : nullptr;
   NormalTag* normals = hasNormalsTag ? (NormalTag*)obj->GetTag(Tnormal) : nullptr;
+  UVWTag* uvs = (UVWTag*)obj->GetTag(Tuvw);
+  ConstUVWHandle uvHandle = uvs ? uvs->GetDataAddressR() : nullptr;
 
   // add verts
   mesh->verts.reserve(numVerts * 3);
   mesh->normals.reserve(numVerts * 3);
   mesh->indices.reserve(numVerts * 3);
+  mesh->uv.reserve(numVerts * 3);
 
   ConstNormalHandle normalHandle = normals ? normals->GetDataAddressR() : nullptr;
 
@@ -229,7 +246,7 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
     bool isQuad = IsQuad(polys[i]);
 
     // face 0, 1, 2
-    AddTriangle(&mesh->verts, verts[idx0], verts[idx1], verts[idx2]);
+    Add3Vector3(&mesh->verts, verts[idx0], verts[idx1], verts[idx2]);
     AddIndices(&mesh->indices, vertOfs + 0, vertOfs + 1, vertOfs + 2);
 
     if (isQuad)
@@ -237,14 +254,14 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
       // face 0, 2, 3
       if (options.shareVertices)
       {
-        AddVector(&mesh->verts, verts[idx3]);
+        AddVector3(&mesh->verts, verts[idx3]);
         AddIndices(&mesh->indices, vertOfs + 0, vertOfs + 2, vertOfs + 3);
         vertOfs += 4;
       }
       else
       {
         // if making a faceted mesh, duplicate the shared vertices
-        AddTriangle(&mesh->verts, verts[idx0], verts[idx1], verts[idx2]);
+        Add3Vector3(&mesh->verts, verts[idx0], verts[idx2], verts[idx3]);
         AddIndices(&mesh->indices, vertOfs + 3 + 0, vertOfs + 3 + 1, vertOfs + 3 + 2);
         vertOfs += 6;
       }
@@ -260,26 +277,26 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
       {
         NormalStruct normal;
         normals->Get(normalHandle, i, normal);
-        AddTriangle(&mesh->normals, normal.a, normal.b, normal.c);
+        Add3Vector3(&mesh->normals, normal.a, normal.b, normal.c);
 
         if (isQuad)
         {
           if (options.shareVertices)
-            AddVector(&mesh->normals, normal.d);
+            AddVector3(&mesh->normals, normal.d);
           else
-            AddTriangle(&mesh->normals, normal.a, normal.c, normal.d);
+            Add3Vector3(&mesh->normals, normal.a, normal.c, normal.d);
         }
       }
       else if (hasPhongTag)
       {
-        AddTriangle(&mesh->normals, phongNormals[i * 4 + 0], phongNormals[i * 4 + 1], phongNormals[i * 4 + 2]);
+        Add3Vector3(&mesh->normals, phongNormals[i * 4 + 0], phongNormals[i * 4 + 1], phongNormals[i * 4 + 2]);
 
         if (isQuad)
         {
           if (options.shareVertices)
-            AddVector(&mesh->normals, phongNormals[i * 4 + 3]);
+            AddVector3(&mesh->normals, phongNormals[i * 4 + 3]);
           else
-            AddTriangle(&mesh->normals, phongNormals[i * 4 + 0], phongNormals[i * 4 + 2], phongNormals[i * 4 + 3]);
+            Add3Vector3(&mesh->normals, phongNormals[i * 4 + 0], phongNormals[i * 4 + 2], phongNormals[i * 4 + 3]);
         }
       }
     }
@@ -287,15 +304,37 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
     {
       // no normals, so generate polygon normals and use them for all verts
       Vector normal = CalcNormal(verts[idx0], verts[idx1], verts[idx2]);
-      AddTriangle(&mesh->normals, normal, normal, normal);
+      Add3Vector3(&mesh->normals, normal, normal, normal);
       if (isQuad)
       {
         if (options.shareVertices)
-          AddVector(&mesh->normals, normal);
+          AddVector3(&mesh->normals, normal);
         else
-          AddTriangle(&mesh->normals, normal, normal, normal);
+          Add3Vector3(&mesh->normals, normal, normal, normal);
       }
     }
+
+    if (uvHandle)
+    {
+
+      UVWStruct s;
+      UVWTag::Get(uvHandle, i, s);
+
+      Add3Vector2(&mesh->uv, s.a, s.b, s.c);
+      if (isQuad)
+      {
+        // face 0, 2, 3
+        if (options.shareVertices)
+        {
+          AddVector2(&mesh->uv, s.d);
+        }
+        else
+        {
+          Add3Vector2(&mesh->uv, s.a, s.c, s.d);
+        }
+      }
+    }
+
   }
 
   if (phongNormals)
