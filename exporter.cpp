@@ -114,9 +114,9 @@ void AddIndices(vector<int>* indices, int a, int b, int c)
 
 //-----------------------------------------------------------------------------
 template <typename T>
-void AddVector2(vector<float>* out, const T& v)
+void AddVector2(vector<float>* out, const T& v, bool flipY)
 {
-  out->push_back(v.x); out->push_back(v.y);
+  out->push_back(v.x); out->push_back(flipY ? 1 - v.y : v.y);
 };
 
 //-----------------------------------------------------------------------------
@@ -128,9 +128,9 @@ void AddVector3(vector<float>* out, const T& v)
 
 //-----------------------------------------------------------------------------
 template <typename T>
-void Add3Vector2(vector<float>* out, const T& a, const T& b, const T& c)
+void Add3Vector2(vector<float>* out, const T& a, const T& b, const T& c, bool flipY)
 {
-  AddVector2(out, a); AddVector2(out, b); AddVector2(out, c);
+  AddVector2(out, a, flipY); AddVector2(out, b, flipY); AddVector2(out, c, flipY);
 };
 
 //-----------------------------------------------------------------------------
@@ -320,17 +320,17 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
       UVWStruct s;
       UVWTag::Get(uvHandle, i, s);
 
-      Add3Vector2(&mesh->uv, s.a, s.b, s.c);
+      Add3Vector2(&mesh->uv, s.a, s.b, s.c, true);
       if (isQuad)
       {
         // face 0, 2, 3
         if (options.shareVertices)
         {
-          AddVector2(&mesh->uv, s.d);
+          AddVector2(&mesh->uv, s.d, true);
         }
         else
         {
-          Add3Vector2(&mesh->uv, s.a, s.c, s.d);
+          Add3Vector2(&mesh->uv, s.a, s.c, s.d, true);
         }
       }
     }
