@@ -616,7 +616,7 @@ string FilenameFromInput(const string& inputFilename, bool stripPath)
       const char* slash = strrchr(ff, '/');
       startPos = slash ? slash - ff + 1 : 0;
     }
-    return inputFilename.substr(startPos, lenToDot) + ".boba";
+    return inputFilename.substr(startPos, lenToDot - startPos) + ".boba";
   }
 
   printf("Invalid input filename given: %s\n", inputFilename.c_str());
