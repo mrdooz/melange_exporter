@@ -15,6 +15,8 @@ using namespace std;
 
 namespace boba
 {
+  static u32 DEFAULT_MATERIAL = ~0u;
+
   struct Options
   {
     string inputFilename;

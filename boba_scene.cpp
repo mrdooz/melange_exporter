@@ -132,7 +132,16 @@ void SaveMesh(const Mesh* mesh, DeferredWriter& writer)
 
   writer.AddDeferredVector(mesh->verts);
   writer.AddDeferredVector(mesh->normals);
-  writer.AddDeferredVector(mesh->uv);
+
+  // Don't save UVs if using the default material
+  if (mesh->materialGroups.size() == 1 && mesh->materialGroups[0].materialId == boba::DEFAULT_MATERIAL)
+  {
+    writer.AddDeferredVector(vector<float>());
+  }
+  else
+  {
+    writer.AddDeferredVector(mesh->uv);
+  }
 
   writer.AddDeferredVector(mesh->indices);
 

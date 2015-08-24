@@ -27,7 +27,6 @@ using namespace std;
 
 namespace
 {
-  const u32 DEFAULT_MATERIAL = ~0u;
   const float DEFAULT_NEAR_PLANE = 1.f;
   const float DEFAULT_FAR_PLANE = 1000.f;
 }
@@ -45,7 +44,7 @@ static string ReplaceAll(const string& str, char toReplace, char replaceWith)
 }
 
 //------------------------------------------------------------------------------
-string MakeCanonical(const string &str)
+string MakeCanonical(const string& str)
 {
   // convert back slashes to forward
   return ReplaceAll(str, '\\', '/');
@@ -60,14 +59,13 @@ extern bool SaveScene(const boba::Scene& scene, const boba::Options& options);
 boba::Scene scene;
 boba::Options options;
 
-#define LOG(lvl, fmt, ...)                             \
-  if (options.verbosity >= lvl)                        \
-    printf(fmt, __VA_ARGS__);                          \
-  if (options.logfile)                                 \
+#define LOG(lvl, fmt, ...)                                                                                   \
+  if (options.verbosity >= lvl)                                                                              \
+    printf(fmt, __VA_ARGS__);                                                                                \
+  if (options.logfile)                                                                                       \
     fprintf(options.logfile, fmt, __VA_ARGS__);
 
 #define RANGE(c) (c).begin(), (c).end()
-
 
 //-----------------------------------------------------------------------------
 string CopyString(const melange::String& str)
@@ -84,10 +82,18 @@ string CopyString(const melange::String& str)
 //-----------------------------------------------------------------------------
 void CopyMatrix(const Matrix& mtx, float* out)
 {
-  out[0] = (float)mtx.v1.x;    out[1] = (float)mtx.v1.y;    out[2] = (float)mtx.v1.z;
-  out[3] = (float)mtx.v2.x;    out[4] = (float)mtx.v2.y;    out[5] = (float)mtx.v2.z;
-  out[6] = (float)mtx.v3.x;    out[7] = (float)mtx.v3.y;    out[8] = (float)mtx.v3.z;
-  out[9] = (float)mtx.off.x;   out[10] = (float)mtx.off.y;  out[11] = (float)mtx.off.z;
+  out[0] = (float)mtx.v1.x;
+  out[1] = (float)mtx.v1.y;
+  out[2] = (float)mtx.v1.z;
+  out[3] = (float)mtx.v2.x;
+  out[4] = (float)mtx.v2.y;
+  out[5] = (float)mtx.v2.z;
+  out[6] = (float)mtx.v3.x;
+  out[7] = (float)mtx.v3.y;
+  out[8] = (float)mtx.v3.z;
+  out[9] = (float)mtx.off.x;
+  out[10] = (float)mtx.off.y;
+  out[11] = (float)mtx.off.z;
 }
 
 //-----------------------------------------------------------------------------
@@ -128,35 +134,44 @@ inline bool IsQuad(const T& p)
 //-----------------------------------------------------------------------------
 void AddIndices(vector<int>* indices, int a, int b, int c)
 {
-  indices->push_back(a); indices->push_back(b); indices->push_back(c);
+  indices->push_back(a);
+  indices->push_back(b);
+  indices->push_back(c);
 };
 
 //-----------------------------------------------------------------------------
 template <typename T>
 void AddVector2(vector<float>* out, const T& v, bool flipY)
 {
-  out->push_back(v.x); out->push_back(flipY ? 1 - v.y : v.y);
+  out->push_back(v.x);
+  out->push_back(flipY ? 1 - v.y : v.y);
 };
 
 //-----------------------------------------------------------------------------
 template <typename T>
 void AddVector3(vector<float>* out, const T& v)
 {
-  out->push_back(v.x); out->push_back(v.y); out->push_back(v.z);
+  out->push_back(v.x);
+  out->push_back(v.y);
+  out->push_back(v.z);
 };
 
 //-----------------------------------------------------------------------------
 template <typename T>
 void Add3Vector2(vector<float>* out, const T& a, const T& b, const T& c, bool flipY)
 {
-  AddVector2(out, a, flipY); AddVector2(out, b, flipY); AddVector2(out, c, flipY);
+  AddVector2(out, a, flipY);
+  AddVector2(out, b, flipY);
+  AddVector2(out, c, flipY);
 };
 
 //-----------------------------------------------------------------------------
 template <typename T>
 void Add3Vector3(vector<float>* out, const T& a, const T& b, const T& c)
 {
-  AddVector3(out, a); AddVector3(out, b); AddVector3(out, c);
+  AddVector3(out, a);
+  AddVector3(out, b);
+  AddVector3(out, c);
 };
 
 //-----------------------------------------------------------------------------
@@ -202,7 +217,10 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
 
   // Loop over all the materials, and add the polygons in the
   // order they appear per material
-  struct Polygon { int a, b, c, d; };
+  struct Polygon
+  {
+    int a, b, c, d;
+  };
   vector<Polygon> polys;
   polys.reserve(obj->GetPolygonCount());
 
@@ -217,7 +235,7 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
 
     for (int i : kv.second)
     {
-      polys.push_back({ polysOrg[i].a, polysOrg[i].b, polysOrg[i].c, polysOrg[i].d });
+      polys.push_back({polysOrg[i].a, polysOrg[i].b, polysOrg[i].c, polysOrg[i].d});
 
       // increment index counter. if the polygon is a quad, then double the increment
       if (polysOrg[i].c == polysOrg[i].d)
@@ -308,14 +326,16 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
       }
       else if (hasPhongTag)
       {
-        Add3Vector3(&mesh->normals, phongNormals[i * 4 + 0], phongNormals[i * 4 + 1], phongNormals[i * 4 + 2]);
+        Add3Vector3(
+            &mesh->normals, phongNormals[i * 4 + 0], phongNormals[i * 4 + 1], phongNormals[i * 4 + 2]);
 
         if (isQuad)
         {
           if (options.shareVertices)
             AddVector3(&mesh->normals, phongNormals[i * 4 + 3]);
           else
-            Add3Vector3(&mesh->normals, phongNormals[i * 4 + 0], phongNormals[i * 4 + 2], phongNormals[i * 4 + 3]);
+            Add3Vector3(
+                &mesh->normals, phongNormals[i * 4 + 0], phongNormals[i * 4 + 2], phongNormals[i * 4 + 3]);
         }
       }
     }
@@ -335,7 +355,6 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
 
     if (uvHandle)
     {
-
       UVWStruct s;
       UVWTag::Get(uvHandle, i, s);
 
@@ -353,7 +372,6 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
         }
       }
     }
-
   }
 
   if (phongNormals)
@@ -419,11 +437,16 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
     if (btag->GetType() == Ttexture)
     {
       GeData data;
-      AlienMaterial *mat = btag->GetParameter(TEXTURETAG_MATERIAL, data) ? (AlienMaterial *) data.GetLink() : NULL;
+      AlienMaterial* mat =
+          btag->GetParameter(TEXTURETAG_MATERIAL, data) ? (AlienMaterial*)data.GetLink() : NULL;
       if (!mat)
         continue;
 
-      auto materialIt = find_if(RANGE(scene.materials), [mat](const boba::Material* m) { return m->mat == mat; });
+      auto materialIt = find_if(RANGE(scene.materials),
+          [mat](const boba::Material* m)
+          {
+            return m->mat == mat;
+          });
       if (materialIt == scene.materials.end())
         continue;
 
@@ -443,7 +466,7 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
         continue;
       }
 
-      if (BaseSelect *bs = ((SelectionTag*)btag)->GetBaseSelect())
+      if (BaseSelect* bs = ((SelectionTag*)btag)->GetBaseSelect())
       {
         auto& polysByMaterial = mesh->polysByMaterial[prevMaterial];
         for (int i = 0, e = obj->GetPolygonCount(); i < e; ++i)
@@ -464,7 +487,7 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
   // if no materials are found, just add them to a dummy material
   if (firstMaterial == ~0u)
   {
-    u32 dummyMaterial = DEFAULT_MATERIAL;
+    u32 dummyMaterial = boba::DEFAULT_MATERIAL;
     auto& polysByMaterial = mesh->polysByMaterial[dummyMaterial];
     for (int i = 0, e = obj->GetPolygonCount(); i < e; ++i)
     {
@@ -484,23 +507,26 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
 
   for (auto g : mesh->polysByMaterial)
   {
-    const char* materialName = g.first == DEFAULT_MATERIAL ? "<default>" : scene.materials[g.first]->name.c_str();
+    const char* materialName =
+        g.first == boba::DEFAULT_MATERIAL ? "<default>" : scene.materials[g.first]->name.c_str();
     LOG(2, "material: %s, %d polys\n", materialName, (int)g.second.size());
   }
 }
 
 //-----------------------------------------------------------------------------
-boba::BaseObject::BaseObject(melange::BaseObject* melangeObj) 
-  : melangeObj(melangeObj)
-  , parent(scene.FindObject(melangeObj->GetUp()))
-  , name(CopyString(melangeObj->GetName()))
-  , id(Scene::nextObjectId++)
+boba::BaseObject::BaseObject(melange::BaseObject* melangeObj)
+    : melangeObj(melangeObj)
+    , parent(scene.FindObject(melangeObj->GetUp()))
+    , name(CopyString(melangeObj->GetName()))
+    , id(Scene::nextObjectId++)
 {
   LOG(1, "Exporting: %s\n", name.c_str());
   melange::BaseObject* melangeParent = melangeObj->GetUp();
   if ((!!melangeParent) ^ (!!parent))
   {
-    LOG(1, "  Unable to find parent! (%s)\n", melangeParent ? CopyString(melangeParent->GetName()).c_str() : "");
+    LOG(1,
+        "  Unable to find parent! (%s)\n",
+        melangeParent ? CopyString(melangeParent->GetName()).c_str() : "");
   }
 
   scene.objMap[melangeObj] = this;
@@ -551,10 +577,12 @@ Bool AlienCameraObjectData::Execute()
   CopyMatrix(baseObj->GetMg(), camera->mtxGlobal);
 
   camera->verticalFov = GetFloatParam(baseObj, CAMERAOBJECT_FOV_VERTICAL);
-  camera->nearPlane = GetInt32Param(baseObj, CAMERAOBJECT_NEAR_CLIPPING_ENABLE) ?
-    max(DEFAULT_NEAR_PLANE, GetFloatParam(baseObj, CAMERAOBJECT_NEAR_CLIPPING)) : DEFAULT_NEAR_PLANE;
-  camera->farPlane = GetInt32Param(baseObj, CAMERAOBJECT_FAR_CLIPPING_ENABLE) ?
-    GetFloatParam(baseObj, CAMERAOBJECT_FAR_CLIPPING) : DEFAULT_FAR_PLANE;
+  camera->nearPlane = GetInt32Param(baseObj, CAMERAOBJECT_NEAR_CLIPPING_ENABLE)
+                          ? max(DEFAULT_NEAR_PLANE, GetFloatParam(baseObj, CAMERAOBJECT_NEAR_CLIPPING))
+                          : DEFAULT_NEAR_PLANE;
+  camera->farPlane = GetInt32Param(baseObj, CAMERAOBJECT_FAR_CLIPPING_ENABLE)
+                         ? GetFloatParam(baseObj, CAMERAOBJECT_FAR_CLIPPING)
+                         : DEFAULT_FAR_PLANE;
 
   scene.cameras.push_back(camera);
   return true;
@@ -568,7 +596,6 @@ bool AlienNullObjectData::Execute()
   boba::NullObject* nullObject = new boba::NullObject(baseObj);
   CopyMatrix(baseObj->GetMl(), nullObject->mtxLocal);
   CopyMatrix(baseObj->GetMg(), nullObject->mtxGlobal);
-
 
   scene.nullObjects.push_back(nullObject);
 
@@ -637,7 +664,11 @@ int ParseOptions(int argc, char** argv)
   int curArg = 1;
   int remaining = argc - 1;
 
-  const auto& step = [&curArg, &remaining](int steps) { curArg += steps; remaining -= steps; };
+  const auto& step = [&curArg, &remaining](int steps)
+  {
+    curArg += steps;
+    remaining -= steps;
+  };
 
   while (remaining)
   {
@@ -654,7 +685,7 @@ int ParseOptions(int argc, char** argv)
         printf("Invalid args\n");
         return 1;
       }
-      options.verbosity = atoi(argv[curArg+1]);
+      options.verbosity = atoi(argv[curArg + 1]);
       step(2);
     }
     else
@@ -707,7 +738,8 @@ u32 boba::Material::nextId;
 
 //------------------------------------------------------------------------------
 #ifndef _WIN32
-template<typename T, typename U> constexpr size_t offsetOf(U T::*member)
+template <typename T, typename U>
+constexpr size_t offsetOf(U T::*member)
 {
   return (char*)&((T*)nullptr->*member) - (char*)nullptr;
 }
@@ -730,13 +762,20 @@ int main(int argc, char** argv)
     time_t t = time(0);
     struct tm* now = localtime(&t);
 
-    LOG(1, "==] STARTING [=================================] %.4d:%.2d:%.2d-%.2d:%.2d:%.2d ]==\n%s -> %s\n",
-      now->tm_year + 1900, now->tm_mon + 1, now->tm_mday, now->tm_hour, now->tm_min, now->tm_sec,
-      options.inputFilename.c_str(), options.outputFilename.c_str());
+    LOG(1,
+        "==] STARTING [=================================] %.4d:%.2d:%.2d-%.2d:%.2d:%.2d ]==\n%s -> %s\n",
+        now->tm_year + 1900,
+        now->tm_mon + 1,
+        now->tm_mday,
+        now->tm_hour,
+        now->tm_min,
+        now->tm_sec,
+        options.inputFilename.c_str(),
+        options.outputFilename.c_str());
   }
-  
-  AlienBaseDocument *C4Ddoc = NewObj(AlienBaseDocument);
-  HyperFile *C4Dfile = NewObj(HyperFile);
+
+  AlienBaseDocument* C4Ddoc = NewObj(AlienBaseDocument);
+  HyperFile* C4Dfile = NewObj(HyperFile);
 
   if (!C4Dfile->Open(DOC_IDENT, options.inputFilename.c_str(), FILEOPEN_READ))
     return 1;
@@ -757,10 +796,15 @@ int main(int argc, char** argv)
     time_t t = time(0);
     struct tm* now = localtime(&t);
 
-    LOG(1, "==] DONE [=====================================] %.4d:%.2d:%.2d-%.2d:%.2d:%.2d ]==\n",
-      now->tm_year + 1900, now->tm_mon + 1, now->tm_mday, now->tm_hour, now->tm_min, now->tm_sec);
+    LOG(1,
+        "==] DONE [=====================================] %.4d:%.2d:%.2d-%.2d:%.2d:%.2d ]==\n",
+        now->tm_year + 1900,
+        now->tm_mon + 1,
+        now->tm_mday,
+        now->tm_hour,
+        now->tm_min,
+        now->tm_sec);
   }
-
 
   if (options.logfile)
     fclose(options.logfile);
