@@ -32,6 +32,25 @@ namespace
   const float DEFAULT_FAR_PLANE = 1000.f;
 }
 
+//------------------------------------------------------------------------------
+static string ReplaceAll(const string& str, char toReplace, char replaceWith)
+{
+  string res(str);
+  for (size_t i = 0; i < res.size(); ++i)
+  {
+    if (res[i] == toReplace)
+      res[i] = replaceWith;
+  }
+  return res;
+}
+
+//------------------------------------------------------------------------------
+string MakeCanonical(const string &str)
+{
+  // convert back slashes to forward
+  return ReplaceAll(str, '\\', '/');
+}
+
 //-----------------------------------------------------------------------------
 
 u32 boba::Scene::nextObjectId = 1;
@@ -189,7 +208,7 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
 
   int numPolys = 0;
   int idx = 0;
-  for (auto kv : mesh->polysByMaterial)
+  for (const pair<u32, vector<int>>& kv : mesh->polysByMaterial)
   {
     boba::Mesh::MaterialGroup mg;
     mg.materialId = kv.first;
@@ -344,7 +363,6 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
 //-----------------------------------------------------------------------------
 void CollectMaterials(AlienBaseDocument* c4dDoc)
 {
-
   // add default material
   scene.materials.push_back(new boba::Material());
   boba::Material* exporterMaterial = scene.materials.back();
@@ -354,7 +372,6 @@ void CollectMaterials(AlienBaseDocument* c4dDoc)
   exporterMaterial->flags = boba::Material::FLAG_COLOR;
   exporterMaterial->color.brightness = 1.f;
   exporterMaterial->color.color = boba::Color(0.5f, 0.5f, 0.5f);
-
 
   for (BaseMaterial* mat = c4dDoc->GetFirstMaterial(); mat; mat = mat->GetNext())
   {
@@ -585,6 +602,28 @@ bool AlienLightObjectData::Execute()
 }
 
 //-----------------------------------------------------------------------------
+string FilenameFromInput(const string& inputFilename, bool stripPath)
+{
+  const char* ff = inputFilename.c_str();
+  const char* dot = strrchr(ff, '.');
+  if (dot)
+  {
+    int lenToDot = dot - ff;
+    int startPos = 0;
+
+    if (stripPath)
+    {
+      const char* slash = strrchr(ff, '/');
+      startPos = slash ? slash - ff + 1 : 0;
+    }
+    return inputFilename.substr(startPos, lenToDot) + ".boba";
+  }
+
+  printf("Invalid input filename given: %s\n", inputFilename.c_str());
+  return string();
+}
+
+//-----------------------------------------------------------------------------
 int ParseOptions(int argc, char** argv)
 {
   // format is [--dont-share-vertices] [--verbose N] input [output]
@@ -631,26 +670,32 @@ int ParseOptions(int argc, char** argv)
     return 1;
   }
 
-  options.inputFilename = argv[curArg];
+  options.inputFilename = MakeCanonical(argv[curArg]);
   step(1);
 
   // create output file
   if (remaining == 1)
   {
-    options.outputFilename = argv[curArg];
-  }
-  else
-  {
-    if (const char* dot = strchr(options.inputFilename.c_str(), '.'))
+    // check if the remaining argument is a file name, or just a directory
+    if (strstr(argv[curArg], "boba") != nullptr)
     {
-      int len = dot - options.inputFilename.c_str();
-      options.outputFilename = options.inputFilename.substr(0, len) + ".boba";
+      options.outputFilename = argv[curArg];
     }
     else
     {
-      printf("Invalid input filename given: %s\n", options.inputFilename.c_str());
-      return 1;
+      // a directory was given, so create the filename from the input file
+      string res = FilenameFromInput(options.inputFilename, true);
+      if (res.empty())
+        return 1;
+
+      options.outputFilename = string(argv[curArg]) + '/' + res;
     }
+  }
+  else
+  {
+    options.outputFilename = FilenameFromInput(options.inputFilename, false);
+    if (options.outputFilename.empty())
+      return 1;
   }
 
   options.logfile = fopen((options.outputFilename + ".log").c_str(), "at");
