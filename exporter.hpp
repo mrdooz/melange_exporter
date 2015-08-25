@@ -8,8 +8,13 @@
 #include <vector>
 #include <unordered_map>
 
-typedef uint32_t u32;
 typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+
+typedef int8_t s8;
+typedef int16_t s16;
+typedef int32_t s32;
 
 using namespace std;
 
@@ -22,7 +27,7 @@ namespace boba
     string inputFilename;
     string outputFilename;
     FILE* logfile = nullptr;
-    bool shareVertices = true;
+    //bool shareVertices = true;
     int verbosity = 1;
   };
 

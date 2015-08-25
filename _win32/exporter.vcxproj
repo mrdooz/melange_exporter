@@ -160,12 +160,22 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\boba_scene.cpp" />
+    <ClCompile Include="..\compress\forsythtriangleorderoptimizer.cpp" />
+    <ClCompile Include="..\compress\indexbuffercompression.cpp" />
+    <ClCompile Include="..\compress\indexbufferdecompression.cpp" />
     <ClCompile Include="..\deferred_writer.cpp" />
     <ClCompile Include="..\exporter.cpp" />
     <ClCompile Include="..\exporter_helpers.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\boba_scene.hpp" />
+    <ClInclude Include="..\compress\forsythtriangleorderoptimizer.h" />
+    <ClInclude Include="..\compress\indexbuffercompression.h" />
+    <ClInclude Include="..\compress\indexbuffercompressionformat.h" />
+    <ClInclude Include="..\compress\indexbufferdecompression.h" />
+    <ClInclude Include="..\compress\indexcompressionconstants.h" />
+    <ClInclude Include="..\compress\readbitstream.h" />
+    <ClInclude Include="..\compress\writebitstream.h" />
     <ClInclude Include="..\deferred_writer.hpp" />
     <ClInclude Include="..\exporter.hpp" />
     <ClInclude Include="..\exporter_helpers.hpp" />

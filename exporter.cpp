@@ -209,14 +209,13 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
   for (int i = 2; i < vertexCount; ++i)
   {
     float cand = (center - verts[1]).GetSquaredLength();
-    radius = max(radius, cand);
+    radius = max(radius, cand); 
   }
 
   mesh->boundingSphere.center = center;
   mesh->boundingSphere.radius = sqrtf(radius);
 
-  // Loop over all the materials, and add the polygons in the
-  // order they appear per material
+  // Loop over all the materials, and add the polygons in the order they appear per material
   struct Polygon
   {
     int a, b, c, d;
@@ -250,8 +249,7 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
   u32 numVerts = 0;
   for (int i = 0; i < numPolys; ++i)
   {
-    // if the polygon is a quad, we're going to double the shared verts
-    numVerts += (options.shareVertices ? 1 : 2) * (IsQuad(polys[i]) ? 4 : 3);
+    numVerts += IsQuad(polys[i]) ? 4 : 3;
   }
 
   // Check what kind of normals exist
@@ -289,19 +287,9 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
     if (isQuad)
     {
       // face 0, 2, 3
-      if (options.shareVertices)
-      {
-        AddVector3(&mesh->verts, verts[idx3]);
-        AddIndices(&mesh->indices, vertOfs + 0, vertOfs + 2, vertOfs + 3);
-        vertOfs += 4;
-      }
-      else
-      {
-        // if making a faceted mesh, duplicate the shared vertices
-        Add3Vector3(&mesh->verts, verts[idx0], verts[idx2], verts[idx3]);
-        AddIndices(&mesh->indices, vertOfs + 3 + 0, vertOfs + 3 + 1, vertOfs + 3 + 2);
-        vertOfs += 6;
-      }
+      AddVector3(&mesh->verts, verts[idx3]);
+      AddIndices(&mesh->indices, vertOfs + 0, vertOfs + 2, vertOfs + 3);
+      vertOfs += 4;
     }
     else
     {
@@ -318,10 +306,7 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
 
         if (isQuad)
         {
-          if (options.shareVertices)
-            AddVector3(&mesh->normals, normal.d);
-          else
-            Add3Vector3(&mesh->normals, normal.a, normal.c, normal.d);
+          AddVector3(&mesh->normals, normal.d);
         }
       }
       else if (hasPhongTag)
@@ -331,11 +316,7 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
 
         if (isQuad)
         {
-          if (options.shareVertices)
-            AddVector3(&mesh->normals, phongNormals[i * 4 + 3]);
-          else
-            Add3Vector3(
-                &mesh->normals, phongNormals[i * 4 + 0], phongNormals[i * 4 + 2], phongNormals[i * 4 + 3]);
+          AddVector3(&mesh->normals, phongNormals[i * 4 + 3]);
         }
       }
     }
@@ -346,10 +327,7 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
       Add3Vector3(&mesh->normals, normal, normal, normal);
       if (isQuad)
       {
-        if (options.shareVertices)
-          AddVector3(&mesh->normals, normal);
-        else
-          Add3Vector3(&mesh->normals, normal, normal, normal);
+        AddVector3(&mesh->normals, normal);
       }
     }
 
@@ -362,14 +340,7 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
       if (isQuad)
       {
         // face 0, 2, 3
-        if (options.shareVertices)
-        {
-          AddVector2(&mesh->uv, s.d, true);
-        }
-        else
-        {
-          Add3Vector2(&mesh->uv, s.a, s.c, s.d, true);
-        }
+        AddVector2(&mesh->uv, s.d, true);
       }
     }
   }
@@ -672,9 +643,10 @@ int ParseOptions(int argc, char** argv)
 
   while (remaining)
   {
-    if (strcmp(argv[curArg], "--dont-share-vertice") == 0)
+    if (strcmp(argv[curArg], "--dont-share-vertices") == 0)
     {
-      options.shareVertices = false;
+      // note: this was unused, and just caused code bloat..
+      //options.shareVertices = false;
       step(1);
     }
     else if (strcmp(argv[curArg], "--verbose") == 0)
