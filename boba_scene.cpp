@@ -142,42 +142,36 @@ void SaveMesh(Mesh* mesh, DeferredWriter& writer)
   writer.AddDeferredVector(mesh->materialGroups);
   writer.AddDeferredVector(mesh->verts);
 
-  size_t numNormals = mesh->normals.size() / 3;
-  vector<s16> compressedNormals(numNormals*2);
-
-  auto Normalize = [](float* v) {
-    float x = v[0];
-    float y = v[1];
-    float z = v[2];
-    float len = sqrt(x*x+y*y+z*z);
-    v[0] /= len;
-    v[1] /= len;
-    v[2] /= len;
-  };
-
-  for (size_t i = 0; i < numNormals; ++i)
-  {
-    Snorm<snormSize> res[2];
-    Normalize(mesh->normals.data() + i * 3);
-    octPEncode(&mesh->normals[i*3], res);
-    compressedNormals[i * 2 + 0] = res[0].bits() & 0xffff;
-    compressedNormals[i * 2 + 1] = res[1].bits() & 0xffff;
-  }
-
-  size_t numUvs = mesh->uv.size();
-  vector<s16> compressedUV(numUvs);
-  for (size_t i = 0; i < numUvs/2; ++i)
-  {
-    Snorm<snormSize> u(mesh->uv[i * 2 + 0]);
-    Snorm<snormSize> v(mesh->uv[i * 2 + 1]);
-    compressedUV[i * 2 + 0] = u.bits() & 0xffff;
-    compressedUV[i * 2 + 1] = v.bits() & 0xffff;
-  }
-
   if (useCompression)
+  {
+    size_t numNormals = mesh->normals.size() / 3;
+    vector<s16> compressedNormals(numNormals * 2);
+
+    auto Normalize = [](float* v) {
+      float x = v[0];
+      float y = v[1];
+      float z = v[2];
+      float len = sqrt(x*x + y*y + z*z);
+      v[0] /= len;
+      v[1] /= len;
+      v[2] /= len;
+    };
+
+    for (size_t i = 0; i < numNormals; ++i)
+    {
+      Snorm<snormSize> res[2];
+      Normalize(mesh->normals.data() + i * 3);
+      octPEncode(&mesh->normals[i * 3], res);
+      compressedNormals[i * 2 + 0] = res[0].bits() & 0xffff;
+      compressedNormals[i * 2 + 1] = res[1].bits() & 0xffff;
+    }
+
     writer.AddDeferredVector(compressedNormals);
+  }
   else
+  {
     writer.AddDeferredVector(mesh->normals);
+  }
  
   // Don't save UVs if using the default material
   if (mesh->materialGroups.size() == 1 && mesh->materialGroups[0].materialId == boba::DEFAULT_MATERIAL)
@@ -187,25 +181,41 @@ void SaveMesh(Mesh* mesh, DeferredWriter& writer)
   else
   {
     if (useCompression)
+    {
+      size_t numUvs = mesh->uv.size();
+      vector<s16> compressedUV(numUvs);
+      for (size_t i = 0; i < numUvs / 2; ++i)
+      {
+        Snorm<snormSize> u(mesh->uv[i * 2 + 0]);
+        Snorm<snormSize> v(mesh->uv[i * 2 + 1]);
+        compressedUV[i * 2 + 0] = u.bits() & 0xffff;
+        compressedUV[i * 2 + 1] = v.bits() & 0xffff;
+      }
       writer.AddDeferredVector(compressedUV);
+    }
     else
+    {
       writer.AddDeferredVector(mesh->uv);
+    }
   }
 
   vector<int> optimizedIndices(mesh->indices.size());
   Forsyth::OptimizeFaces((const u32*)mesh->indices.data(), (u32)mesh->indices.size(), (u32)mesh->verts.size() / 3, (u32*)optimizedIndices.data(), 32);
   mesh->indices.swap(optimizedIndices);
 
-  WriteBitstream output;
-  vector<u32> vertexRemap(mesh->verts.size() / 3);
-  CompressIndexBuffer((const u32*)mesh->indices.data(), (u32)mesh->indices.size() / 3, vertexRemap.data(), (u32)vertexRemap.size(), IBCF_AUTO, output);
-  // TODO: remap the vertices
-  vector<u8> compressedIndices(output.ByteSize());
-
   if (useCompression)
+  {
+    WriteBitstream output;
+    vector<u32> vertexRemap(mesh->verts.size() / 3);
+    CompressIndexBuffer((const u32*)mesh->indices.data(), (u32)mesh->indices.size() / 3, vertexRemap.data(), (u32)vertexRemap.size(), IBCF_AUTO, output);
+    // TODO: remap the vertices
+    vector<u8> compressedIndices(output.ByteSize());
     writer.AddDeferredVector(compressedIndices);
+  }
   else
+  {
     writer.AddDeferredVector(mesh->indices);
+  }
 
   // save bounding box
   writer.Write(mesh->boundingSphere);
