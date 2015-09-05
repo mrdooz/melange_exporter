@@ -10,6 +10,8 @@ namespace protocol
   struct SceneBlob
   {
     char id[4];
+    u32 version;
+    u32 flags;
     u32 fixupOffset;
     u32 nullObjectDataStart;
     u32 meshDataStart;
@@ -51,6 +53,9 @@ namespace protocol
     float* normals;
     float* uv;
     u32* indices;
+
+    u32 numSelectedEdges;
+    u32* selectedEdges;
 
     // bounding sphere
     float sx, sy, sz, r;

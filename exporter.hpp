@@ -142,6 +142,7 @@ namespace boba
     vector<float> uv;
     vector<int> indices;
     vector<MaterialGroup> materialGroups;
+    vector<u32> selectedEdges;
     unordered_map<u32, vector<int>> polysByMaterial;
 
     Sphere boundingSphere;

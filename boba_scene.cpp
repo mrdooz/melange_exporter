@@ -29,6 +29,9 @@ bool SaveScene(const Scene& scene, const Options& options)
   header.id[2] = 'b';
   header.id[3] = 'a';
 
+  header.version = 1;
+  header.flags = 0;
+
   // dummy write the header
   writer.Write(header);
 
@@ -216,6 +219,9 @@ void SaveMesh(Mesh* mesh, DeferredWriter& writer)
   {
     writer.AddDeferredVector(mesh->indices);
   }
+
+  writer.Write((int)mesh->selectedEdges.size());
+  writer.AddDeferredVector(mesh->selectedEdges);
 
   // save bounding box
   writer.Write(mesh->boundingSphere);

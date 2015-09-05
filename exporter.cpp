@@ -187,15 +187,36 @@ Vector CalcNormal(const Vector& a, const Vector& b, const Vector& c)
 }
 
 //-----------------------------------------------------------------------------
-void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
+void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
 {
   // get point and polygon array pointer and counts
-  const Vector* verts = obj->GetPointR();
-  const CPolygon* polysOrg = obj->GetPolygonR();
+  const Vector* verts = polyObj->GetPointR();
+  const CPolygon* polysOrg = polyObj->GetPolygonR();
 
-  int vertexCount = obj->GetPointCount();
+  int vertexCount = polyObj->GetPointCount();
   if (!vertexCount)
     return;
+
+  // Collect selected edges
+  BaseSelect* selectedEdges = polyObj->GetEdgeS();
+  int numSelected = selectedEdges->GetCount();
+  if (numSelected > 0)
+  {
+    UChar* arr = selectedEdges->ToArray(polyObj->GetPolygonCount() * 4);
+    for (int i = 0; i < polyObj->GetPolygonCount(); ++i)
+    {
+      int numEdges = IsQuad(polysOrg[i]) ? 4 : 3;
+      for (int j = 0; j < numEdges; ++j)
+      {
+        if (arr[i*4+j])
+        {
+          mesh->selectedEdges.push_back(*(int*)(&polysOrg[i].a + j));
+          mesh->selectedEdges.push_back(*(int*)(&polysOrg[i].a + (j+1) % numEdges));
+        }
+      }
+    }
+    DeleteMem(arr);
+  }
 
   // calc bounding sphere (get center and max radius)
   Vector center(verts[0]);
@@ -208,7 +229,7 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
   float radius = (center - verts[1]).GetSquaredLength();
   for (int i = 2; i < vertexCount; ++i)
   {
-    float cand = (center - verts[1]).GetSquaredLength();
+    float cand = (center - verts[i]).GetSquaredLength();
     radius = max(radius, cand); 
   }
 
@@ -220,8 +241,9 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
   {
     int a, b, c, d;
   };
+
   vector<Polygon> polys;
-  polys.reserve(obj->GetPolygonCount());
+  polys.reserve(polyObj->GetPolygonCount());
 
   int numPolys = 0;
   int idx = 0;
@@ -253,13 +275,13 @@ void CollectVertices(PolygonObject* obj, boba::Mesh* mesh)
   }
 
   // Check what kind of normals exist
-  bool hasNormalsTag = !!obj->GetTag(Tnormal);
-  bool hasPhongTag = !!obj->GetTag(Tphong);
+  bool hasNormalsTag = !!polyObj->GetTag(Tnormal);
+  bool hasPhongTag = !!polyObj->GetTag(Tphong);
   bool hasNormals = hasNormalsTag || hasPhongTag;
 
-  Vector32* phongNormals = hasPhongTag ? obj->CreatePhongNormals() : nullptr;
-  NormalTag* normals = hasNormalsTag ? (NormalTag*)obj->GetTag(Tnormal) : nullptr;
-  UVWTag* uvs = (UVWTag*)obj->GetTag(Tuvw);
+  Vector32* phongNormals = hasPhongTag ? polyObj->CreatePhongNormals() : nullptr;
+  NormalTag* normals = hasNormalsTag ? (NormalTag*)polyObj->GetTag(Tnormal) : nullptr;
+  UVWTag* uvs = (UVWTag*)polyObj->GetTag(Tuvw);
   ConstUVWHandle uvHandle = uvs ? uvs->GetDataAddressR() : nullptr;
 
   // add verts
@@ -507,15 +529,15 @@ boba::BaseObject::BaseObject(melange::BaseObject* melangeObj)
 Bool AlienPolygonObjectData::Execute()
 {
   BaseObject* baseObj = (BaseObject*)GetNode();
-  PolygonObject* obj = (PolygonObject*)baseObj;
+  PolygonObject* polyObj = (PolygonObject*)baseObj;
 
   boba::Mesh* mesh = new boba::Mesh(baseObj);
 
-  CollectMeshMaterials(obj, mesh);
-  CollectVertices(obj, mesh);
+  CollectMeshMaterials(polyObj, mesh);
+  CollectVertices(polyObj, mesh);
 
-  CopyMatrix(obj->GetMl(), mesh->mtxLocal);
-  CopyMatrix(obj->GetMg(), mesh->mtxGlobal);
+  CopyMatrix(polyObj->GetMl(), mesh->mtxLocal);
+  CopyMatrix(polyObj->GetMg(), mesh->mtxGlobal);
   scene.meshes.push_back(mesh);
 
   return true;
