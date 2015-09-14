@@ -198,10 +198,22 @@ void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
     return;
 
   // Collect selected edges
+  // This is just plain broken now
+#if 0
   BaseSelect* selectedEdges = polyObj->GetEdgeS();
   int numSelected = selectedEdges->GetCount();
   if (numSelected > 0)
   {
+    NgonBase* ngonBase = polyObj->GetNgonBase();
+    Pgon* pgons = ngonBase->GetNgons();
+    int ii = ngonBase->GetCount();
+    if (ii > 0)
+    {
+      int a = 10;
+    }
+    for (int i = 0; i < ngonBase->GetCount(); ++i)
+    {
+    }
     UChar* arr = selectedEdges->ToArray(polyObj->GetPolygonCount() * 4);
     for (int i = 0; i < polyObj->GetPolygonCount(); ++i)
     {
@@ -217,7 +229,7 @@ void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
     }
     DeleteMem(arr);
   }
-
+#endif
   // calc bounding sphere (get center and max radius)
   Vector center(verts[0]);
   for (int i = 1; i < vertexCount; ++i)
