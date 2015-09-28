@@ -5,7 +5,7 @@
 
 #include "exporter.hpp"
 #include "exporter_helpers.hpp"
-#include "boba_scene.hpp"
+#include "boba_scene_format.hpp"
 #include "deferred_writer.hpp"
 
 #include <c4d_file.h>
@@ -197,39 +197,6 @@ void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
   if (!vertexCount)
     return;
 
-  // Collect selected edges
-  // This is just plain broken now
-#if 0
-  BaseSelect* selectedEdges = polyObj->GetEdgeS();
-  int numSelected = selectedEdges->GetCount();
-  if (numSelected > 0)
-  {
-    NgonBase* ngonBase = polyObj->GetNgonBase();
-    Pgon* pgons = ngonBase->GetNgons();
-    int ii = ngonBase->GetCount();
-    if (ii > 0)
-    {
-      int a = 10;
-    }
-    for (int i = 0; i < ngonBase->GetCount(); ++i)
-    {
-    }
-    UChar* arr = selectedEdges->ToArray(polyObj->GetPolygonCount() * 4);
-    for (int i = 0; i < polyObj->GetPolygonCount(); ++i)
-    {
-      int numEdges = IsQuad(polysOrg[i]) ? 4 : 3;
-      for (int j = 0; j < numEdges; ++j)
-      {
-        if (arr[i*4+j])
-        {
-          mesh->selectedEdges.push_back(*(int*)(&polysOrg[i].a + j));
-          mesh->selectedEdges.push_back(*(int*)(&polysOrg[i].a + (j+1) % numEdges));
-        }
-      }
-    }
-    DeleteMem(arr);
-  }
-#endif
   // calc bounding sphere (get center and max radius)
   Vector center(verts[0]);
   for (int i = 1; i < vertexCount; ++i)
@@ -538,6 +505,12 @@ boba::BaseObject::BaseObject(melange::BaseObject* melangeObj)
 }
 
 //-----------------------------------------------------------------------------
+Bool AlienPrimitiveObjectData::Execute()
+{
+  return true;
+}
+
+//-----------------------------------------------------------------------------
 Bool AlienPolygonObjectData::Execute()
 {
   BaseObject* baseObj = (BaseObject*)GetNode();
@@ -594,15 +567,71 @@ Bool AlienCameraObjectData::Execute()
 }
 
 //-----------------------------------------------------------------------------
+void GetChildren(BaseObject* obj, vector<BaseObject*>* children)
+{
+  BaseObject* child = obj->GetDown();
+  while (child)
+  {
+    children->push_back(child);
+    child = child->GetNext();
+  }
+}
+
+//-----------------------------------------------------------------------------
+void ExportSpline(BaseObject* obj)
+{
+  SplineObject* splineObject = static_cast<SplineObject*>(obj);
+  string splineName = CopyString(splineObject->GetName());
+
+  SPLINETYPE splineType = splineObject->GetSplineType();
+  bool isClosed = splineObject->GetIsClosed();
+  int pointCount = splineObject->GetPointCount();
+  const Vector* points = splineObject->GetPointR();
+
+  boba::Spline* s = new boba::Spline(splineObject);
+  s->type = splineType;
+  s->isClosed = isClosed;
+
+  s->points.reserve(pointCount * 3);
+  for (int i = 0; i < pointCount; ++i)
+  {
+    s->points.push_back(points[i].x);
+    s->points.push_back(points[i].y);
+    s->points.push_back(points[i].z);
+  }
+
+  scene.splines.push_back(s);
+}
+
+//-----------------------------------------------------------------------------
 bool AlienNullObjectData::Execute()
 {
   BaseObject* baseObj = (BaseObject*)GetNode();
+
+  const string name = CopyString(baseObj->GetName());
 
   boba::NullObject* nullObject = new boba::NullObject(baseObj);
   CopyMatrix(baseObj->GetMl(), nullObject->mtxLocal);
   CopyMatrix(baseObj->GetMg(), nullObject->mtxGlobal);
 
   scene.nullObjects.push_back(nullObject);
+
+  // Export spline objects that are children to the null object
+  vector<BaseObject*> children;
+  GetChildren(baseObj, &children);
+  for (BaseObject* obj: children)
+  {
+    Int32 type = obj->GetType();
+    switch (type)
+    {
+      case Ospline:
+      {
+        ExportSpline(obj);
+        break;
+      }
+    }
+  }
+
 
   return true;
 }

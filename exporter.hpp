@@ -61,14 +61,6 @@ namespace boba
   };
 
   //------------------------------------------------------------------------------
-
-  struct MaterialComponent
-  {
-    Color color;
-    string texture;
-    float brightness;
-  };
-
   struct BaseObject
   {
     BaseObject(melange::BaseObject* melangeObj);
@@ -81,6 +73,7 @@ namespace boba
     u32 id = ~0u;
   };
 
+  //------------------------------------------------------------------------------
   struct Light : public BaseObject
   {
     Light(melange::BaseObject* melangeObj) : BaseObject(melangeObj) {}
@@ -89,11 +82,13 @@ namespace boba
     int type;
   };
 
+  //------------------------------------------------------------------------------
   struct NullObject : public BaseObject
   {
     NullObject(melange::BaseObject* melangeObj) : BaseObject(melangeObj) {}
   };
 
+  //------------------------------------------------------------------------------
   struct Camera : public BaseObject
   {
     Camera(melange::BaseObject* melangeObj) : BaseObject(melangeObj) {}
@@ -102,6 +97,15 @@ namespace boba
     float nearPlane, farPlane;
   };
 
+  //------------------------------------------------------------------------------
+  struct MaterialComponent
+  {
+    Color color;
+    string texture;
+    float brightness;
+  };
+
+  //------------------------------------------------------------------------------
   struct Material
   {
     enum Flags
@@ -123,6 +127,15 @@ namespace boba
     MaterialComponent reflection;
 
     static u32 nextId;
+  };
+
+  //------------------------------------------------------------------------------
+  struct Spline : public BaseObject
+  {
+    Spline(melange::SplineObject* melangeObj) : BaseObject(melangeObj) {}
+    int type = 0;
+    vector<float> points;
+    bool isClosed = 0;
   };
 
   //------------------------------------------------------------------------------
@@ -158,6 +171,7 @@ namespace boba
     vector<NullObject*> nullObjects;
     vector<Light*> lights;
     vector<Material*> materials;
+    vector<Spline*> splines;
     unordered_map<melange::BaseObject*, boba::BaseObject*> objMap;
 
     static u32 nextObjectId;

@@ -1,6 +1,6 @@
 #include "exporter.hpp"
 #include "deferred_writer.hpp"
-#include "boba_scene.hpp"
+#include "boba_scene_format.hpp"
 
 #include "compress/indexbuffercompression.h"
 #include "compress/indexbufferdecompression.h"
@@ -14,6 +14,7 @@ void SaveMesh(Mesh* mesh, DeferredWriter& writer);
 void SaveCamera(const Camera* camera, DeferredWriter& writer);
 void SaveLight(const Light* light, DeferredWriter& writer);
 void SaveNullObject(const NullObject* nullObject, DeferredWriter& writer);
+void SaveSpline(const Spline* spline, DeferredWriter& writer);
 
 //------------------------------------------------------------------------------
 bool SaveScene(const Scene& scene, const Options& options)
@@ -29,8 +30,8 @@ bool SaveScene(const Scene& scene, const Options& options)
   header.id[2] = 'b';
   header.id[3] = 'a';
 
-  header.version = 1;
   header.flags = 0;
+  header.version = 2;
 
   // dummy write the header
   writer.Write(header);
@@ -38,27 +39,44 @@ bool SaveScene(const Scene& scene, const Options& options)
   header.numNullObjects = (u32)scene.nullObjects.size();
   header.nullObjectDataStart = header.numNullObjects ? (u32)writer.GetFilePos() : 0;
   for (NullObject* obj : scene.nullObjects)
+  {
     SaveNullObject(obj, writer);
+  }
 
   header.numMeshes = (u32)scene.meshes.size();
   header.meshDataStart = header.numMeshes ? (u32)writer.GetFilePos() : 0;
   for (Mesh* mesh : scene.meshes)
+  {
     SaveMesh(mesh, writer);
+  }
 
   header.numLights = (u32)scene.lights.size();
   header.lightDataStart = header.numLights ? (u32)writer.GetFilePos() : 0;
   for (const Light* light : scene.lights)
+  {
     SaveLight(light, writer);
+  }
 
   header.numCameras = (u32)scene.cameras.size();
   header.cameraDataStart = header.numCameras ? (u32)writer.GetFilePos() : 0;
   for (const Camera* camera : scene.cameras)
+  {
     SaveCamera(camera, writer);
+  }
 
   header.numMaterials = (u32)scene.materials.size();
   header.materialDataStart = header.numMaterials ? (u32)writer.GetFilePos() : 0;
   for (const Material* material : scene.materials)
+  {
     SaveMaterial(material, writer);
+  }
+
+  header.numSplines = (u32)scene.splines.size();
+  header.splineDataStart = header.numSplines ? (u32)writer.GetFilePos() : 0;
+  for (const Spline* spline : scene.splines)
+  {
+    SaveSpline(spline, writer);
+  }
 
   header.fixupOffset = (u32)writer.GetFilePos();
   writer.WriteDeferredData();
@@ -245,6 +263,17 @@ void SaveLight(const Light* light, DeferredWriter& writer)
   writer.Write(light->type);
   writer.Write(light->color);
   writer.Write(light->intensity);
+}
+
+//------------------------------------------------------------------------------
+void SaveSpline(const Spline* spline, DeferredWriter& writer)
+{
+  SaveBase(spline, writer);
+
+  writer.Write(spline->type);
+  writer.Write((int)spline->points.size() / 3);
+  writer.AddDeferredVector(spline->points);
+  writer.Write(spline->isClosed);
 }
 
 //------------------------------------------------------------------------------

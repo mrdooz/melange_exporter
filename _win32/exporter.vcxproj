@@ -168,7 +168,7 @@
     <ClCompile Include="..\exporter_helpers.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\boba_scene.hpp" />
+    <ClInclude Include="..\boba_scene_format.hpp" />
     <ClInclude Include="..\compress\forsythtriangleorderoptimizer.h" />
     <ClInclude Include="..\compress\indexbuffercompression.h" />
     <ClInclude Include="..\compress\indexbuffercompressionformat.h" />

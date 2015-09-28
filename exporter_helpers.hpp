@@ -2,7 +2,6 @@
 
 #pragma once
 #include <c4d_file.h>
-#include <c4d_file.h>
 #include <c4d_ccurve.h>
 #include <c4d_ctrack.h>
 #include <stdint.h>
@@ -42,6 +41,17 @@ namespace melange
   };
 
   //-----------------------------------------------------------------------------
+  class AlienPointObjectData : public PointObjectData
+  {
+    INSTANCEOF(AlienPointObjectData, PointObjectData)
+  public:
+    virtual Bool Execute()
+    {
+      return true; 
+    }
+  };
+
+  //-----------------------------------------------------------------------------
   class AlienPolygonObjectData : public PolygonObjectData
   {
   INSTANCEOF(AlienPolygonObjectData, PolygonObjectData)
@@ -62,7 +72,7 @@ namespace melange
   {
   INSTANCEOF(AlienPrimitiveObjectData, NodeData)
   public:
-    virtual Bool Execute() { return true; }
+    virtual Bool Execute();
   };
 
   //-----------------------------------------------------------------------------

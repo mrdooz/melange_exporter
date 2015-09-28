@@ -10,7 +10,7 @@ namespace protocol
   struct SceneBlob
   {
     char id[4];
-    u32 version;
+    u32 version = 2;
     u32 flags;
     u32 fixupOffset;
     u32 nullObjectDataStart;
@@ -23,8 +23,9 @@ namespace protocol
     u32 numLights;
     u32 numCameras;
     u32 numMaterials;
-#pragma warning(suppress: 4200)
-    char data[0];
+    // new in version 2
+    u32 splineDataStart;
+    u32 numSplines;
   };
 
   struct BlobBase
@@ -77,6 +78,14 @@ namespace protocol
     int type;
     float colorRgb[3];
     float intensity;
+  };
+
+  struct SplineBlob : public BlobBase
+  {
+    int type;
+    u32 numPoints;
+    float* points;
+    bool isCLosed;
   };
 
   struct MaterialBlob

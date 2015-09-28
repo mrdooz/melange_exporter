@@ -34,6 +34,7 @@ NodeData *AllocAlienObjectData(Int32 id, Bool &known)
     case Ocamera:   m_data = NewObj(AlienCameraObjectData); break;
     case Onull:     m_data = NewObj(AlienNullObjectData); break;
     case Olight:    m_data = NewObj(AlienLightObjectData); break;
+    case Opoint:   m_data = NewObj(AlienPointObjectData); break;
     case Osphere:   m_data = NewObj(AlienPrimitiveObjectData); break;
     case Ocube:     m_data = NewObj(AlienPrimitiveObjectData); break;
     case Oplane:    m_data = NewObj(AlienPrimitiveObjectData); break;
