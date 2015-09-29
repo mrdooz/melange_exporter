@@ -9,12 +9,12 @@
 
 using namespace boba;
 
-void SaveMaterial(const Material* material, DeferredWriter& writer);
-void SaveMesh(Mesh* mesh, DeferredWriter& writer);
-void SaveCamera(const Camera* camera, DeferredWriter& writer);
-void SaveLight(const Light* light, DeferredWriter& writer);
-void SaveNullObject(const NullObject* nullObject, DeferredWriter& writer);
-void SaveSpline(const Spline* spline, DeferredWriter& writer);
+void SaveMaterial(const Material* material, const Options& options, DeferredWriter& writer);
+void SaveMesh(Mesh* mesh, const Options& options, DeferredWriter& writer);
+void SaveCamera(const Camera* camera, const Options& options, DeferredWriter& writer);
+void SaveLight(const Light* light, const Options& options, DeferredWriter& writer);
+void SaveNullObject(const NullObject* nullObject, const Options& options, DeferredWriter& writer);
+void SaveSpline(const Spline* spline, const Options& options, DeferredWriter& writer);
 
 //------------------------------------------------------------------------------
 bool SaveScene(const Scene& scene, const Options& options)
@@ -40,42 +40,42 @@ bool SaveScene(const Scene& scene, const Options& options)
   header.nullObjectDataStart = header.numNullObjects ? (u32)writer.GetFilePos() : 0;
   for (NullObject* obj : scene.nullObjects)
   {
-    SaveNullObject(obj, writer);
+    SaveNullObject(obj, options, writer);
   }
 
   header.numMeshes = (u32)scene.meshes.size();
   header.meshDataStart = header.numMeshes ? (u32)writer.GetFilePos() : 0;
   for (Mesh* mesh : scene.meshes)
   {
-    SaveMesh(mesh, writer);
+    SaveMesh(mesh, options, writer);
   }
 
   header.numLights = (u32)scene.lights.size();
   header.lightDataStart = header.numLights ? (u32)writer.GetFilePos() : 0;
   for (const Light* light : scene.lights)
   {
-    SaveLight(light, writer);
+    SaveLight(light, options, writer);
   }
 
   header.numCameras = (u32)scene.cameras.size();
   header.cameraDataStart = header.numCameras ? (u32)writer.GetFilePos() : 0;
   for (const Camera* camera : scene.cameras)
   {
-    SaveCamera(camera, writer);
+    SaveCamera(camera, options, writer);
   }
 
   header.numMaterials = (u32)scene.materials.size();
   header.materialDataStart = header.numMaterials ? (u32)writer.GetFilePos() : 0;
   for (const Material* material : scene.materials)
   {
-    SaveMaterial(material, writer);
+    SaveMaterial(material, options, writer);
   }
 
   header.numSplines = (u32)scene.splines.size();
   header.splineDataStart = header.numSplines ? (u32)writer.GetFilePos() : 0;
   for (const Spline* spline : scene.splines)
   {
-    SaveSpline(spline, writer);
+    SaveSpline(spline, options, writer);
   }
 
   header.fixupOffset = (u32)writer.GetFilePos();
@@ -89,7 +89,7 @@ bool SaveScene(const Scene& scene, const Options& options)
 }
 
 //------------------------------------------------------------------------------
-void SaveMaterial(const Material* material, DeferredWriter& writer)
+void SaveMaterial(const Material* material, const Options& options, DeferredWriter& writer)
 {
   writer.StartBlockMarker();
 
@@ -134,7 +134,7 @@ void SaveMaterial(const Material* material, DeferredWriter& writer)
 }
 
 //------------------------------------------------------------------------------
-void SaveBase(const BaseObject* base, DeferredWriter& writer)
+void SaveBase(const BaseObject* base, const Options& options, DeferredWriter& writer)
 {
   writer.AddDeferredString(base->name);
   writer.Write(base->id);
@@ -144,7 +144,7 @@ void SaveBase(const BaseObject* base, DeferredWriter& writer)
 }
 
 //------------------------------------------------------------------------------
-void SaveMesh(Mesh* mesh, DeferredWriter& writer)
+void SaveMesh(Mesh* mesh, const Options& options, DeferredWriter& writer)
 {
   bool useCompression = false;
 
@@ -152,7 +152,7 @@ void SaveMesh(Mesh* mesh, DeferredWriter& writer)
   // org: 2,030,104 crystals_flat.boba
   // compressed indices: 1,712,177 crystals_flat.boba
   // compressed indices + compressed normals: 1,213,649 crystals_flat.boba
-  SaveBase(mesh, writer);
+  SaveBase(mesh, options, writer);
 
   // Note, divide by 3 here to write # verts, and not # floats
   writer.Write((u32)mesh->verts.size() / 3);
@@ -168,11 +168,12 @@ void SaveMesh(Mesh* mesh, DeferredWriter& writer)
     size_t numNormals = mesh->normals.size() / 3;
     vector<s16> compressedNormals(numNormals * 2);
 
-    auto Normalize = [](float* v) {
+    auto Normalize = [](float* v)
+    {
       float x = v[0];
       float y = v[1];
       float z = v[2];
-      float len = sqrt(x*x + y*y + z*z);
+      float len = sqrt(x * x + y * y + z * z);
       v[0] /= len;
       v[1] /= len;
       v[2] /= len;
@@ -193,9 +194,10 @@ void SaveMesh(Mesh* mesh, DeferredWriter& writer)
   {
     writer.AddDeferredVector(mesh->normals);
   }
- 
+
   // Don't save UVs if using the default material
-  if (mesh->materialGroups.size() == 1 && mesh->materialGroups[0].materialId == boba::DEFAULT_MATERIAL)
+  if (mesh->materialGroups.size() == 1
+      && mesh->materialGroups[0].materialId == boba::DEFAULT_MATERIAL)
   {
     writer.AddDeferredVector(vector<float>());
   }
@@ -221,14 +223,23 @@ void SaveMesh(Mesh* mesh, DeferredWriter& writer)
   }
 
   vector<int> optimizedIndices(mesh->indices.size());
-  Forsyth::OptimizeFaces((const u32*)mesh->indices.data(), (u32)mesh->indices.size(), (u32)mesh->verts.size() / 3, (u32*)optimizedIndices.data(), 32);
+  Forsyth::OptimizeFaces((const u32*)mesh->indices.data(),
+      (u32)mesh->indices.size(),
+      (u32)mesh->verts.size() / 3,
+      (u32*)optimizedIndices.data(),
+      32);
   mesh->indices.swap(optimizedIndices);
 
   if (useCompression)
   {
     WriteBitstream output;
     vector<u32> vertexRemap(mesh->verts.size() / 3);
-    CompressIndexBuffer((const u32*)mesh->indices.data(), (u32)mesh->indices.size() / 3, vertexRemap.data(), (u32)vertexRemap.size(), IBCF_AUTO, output);
+    CompressIndexBuffer((const u32*)mesh->indices.data(),
+        (u32)mesh->indices.size() / 3,
+        vertexRemap.data(),
+        (u32)vertexRemap.size(),
+        IBCF_AUTO,
+        output);
     // TODO: remap the vertices
     vector<u8> compressedIndices(output.ByteSize());
     writer.AddDeferredVector(compressedIndices);
@@ -241,14 +252,14 @@ void SaveMesh(Mesh* mesh, DeferredWriter& writer)
   writer.Write((int)mesh->selectedEdges.size());
   writer.AddDeferredVector(mesh->selectedEdges);
 
-  // save bounding box
+  // save bounding volume
   writer.Write(mesh->boundingSphere);
 }
 
 //------------------------------------------------------------------------------
-void SaveCamera(const Camera* camera, DeferredWriter& writer)
+void SaveCamera(const Camera* camera, const Options& options, DeferredWriter& writer)
 {
-  SaveBase(camera, writer);
+  SaveBase(camera, options, writer);
 
   writer.Write(camera->verticalFov);
   writer.Write(camera->nearPlane);
@@ -256,19 +267,19 @@ void SaveCamera(const Camera* camera, DeferredWriter& writer)
 }
 
 //------------------------------------------------------------------------------
-void SaveLight(const Light* light, DeferredWriter& writer)
+void SaveLight(const Light* light, const Options& options, DeferredWriter& writer)
 {
-  SaveBase(light, writer);
-  
+  SaveBase(light, options, writer);
+
   writer.Write(light->type);
   writer.Write(light->color);
   writer.Write(light->intensity);
 }
 
 //------------------------------------------------------------------------------
-void SaveSpline(const Spline* spline, DeferredWriter& writer)
+void SaveSpline(const Spline* spline, const Options& options, DeferredWriter& writer)
 {
-  SaveBase(spline, writer);
+  SaveBase(spline, options, writer);
 
   writer.Write(spline->type);
   writer.Write((int)spline->points.size() / 3);
@@ -277,7 +288,7 @@ void SaveSpline(const Spline* spline, DeferredWriter& writer)
 }
 
 //------------------------------------------------------------------------------
-void SaveNullObject(const NullObject* nullObject, DeferredWriter& writer)
+void SaveNullObject(const NullObject* nullObject, const Options& options, DeferredWriter& writer)
 {
-  SaveBase(nullObject, writer);
+  SaveBase(nullObject, options, writer);
 }

@@ -687,7 +687,7 @@ string FilenameFromInput(const string& inputFilename, bool stripPath)
 //-----------------------------------------------------------------------------
 int ParseOptions(int argc, char** argv)
 {
-  // format is [--dont-share-vertices] [--verbose N] input [output]
+  // format is [--verbose N] input [output]
 
   if (argc < 2)
   {
@@ -706,10 +706,12 @@ int ParseOptions(int argc, char** argv)
 
   while (remaining)
   {
-    if (strcmp(argv[curArg], "--dont-share-vertices") == 0)
+    if (strcmp(argv[curArg], "--compress-vertices") == 0)
     {
-      // note: this was unused, and just caused code bloat..
-      //options.shareVertices = false;
+      step(1);
+    }
+    else if (strcmp(argv[curArg], "--compress-indices") == 0)
+    {
       step(1);
     }
     else if (strcmp(argv[curArg], "--verbose") == 0)

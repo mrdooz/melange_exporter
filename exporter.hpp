@@ -27,7 +27,8 @@ namespace boba
     string inputFilename;
     string outputFilename;
     FILE* logfile = nullptr;
-    //bool shareVertices = true;
+    bool compressVertices = false;
+    bool compressIndices = false;
     int verbosity = 1;
   };
 
