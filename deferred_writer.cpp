@@ -81,15 +81,16 @@ void DeferredWriter::WriteDeferredData()
     PopFilePos();
   }
 
+  // save the references to the deferred data
   Write((int)(_deferredData.size() + _localFixups.size()));
 
-  // save the references to the deferred data
   for (const DeferredData& d : _deferredData)
     Write(d.ref);
 
   for (const LocalFixup& lf : _localFixups)
     Write(lf.ref);
 
+  // Save the deferred data
   for (const DeferredData& deferred : _deferredData)
   {
     int dataPos = GetFilePos();
@@ -99,7 +100,7 @@ void DeferredWriter::WriteDeferredData()
     WriteRaw(&deferred.data[0], len);
 
     // Jump back to the position that references this blob, and update
-    // it's reference to point to the correct location
+    // its reference to point to the correct location
     PushFilePos();
     SetFilePos(deferred.ref);
     WritePtr(dataPos);

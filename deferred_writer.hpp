@@ -17,6 +17,8 @@ namespace boba
     DeferredWriter();
     ~DeferredWriter();
 
+    // When adding deferred data, f ex a vector, one of these structs is created, and binds
+    // together the caller and the data
     struct DeferredData
     {
       DeferredData(u32 ref, const void *d, u32 len, bool saveBlobSize)

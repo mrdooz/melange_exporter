@@ -52,6 +52,8 @@ namespace boba
     Color(float r, float g, float b) : r(r), g(g), b(b) {}
     Color() : r(0), g(0), b(0) {}
     float r, g, b;
+    // Note, alpha is written to disk, so don't remove this again :)
+    float a = 1;
   };
 
   //------------------------------------------------------------------------------
