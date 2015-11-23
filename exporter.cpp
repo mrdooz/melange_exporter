@@ -29,7 +29,12 @@ namespace
 {
   const float DEFAULT_NEAR_PLANE = 1.f;
   const float DEFAULT_FAR_PLANE = 1000.f;
+
+  AlienBaseDocument* g_Doc;
+  HyperFile* g_File;
 }
+
+void CollectionAnimationTracks(BaseList2D* bl, vector<boba::Track>* tracks);
 
 //------------------------------------------------------------------------------
 static string ReplaceAll(const string& str, char toReplace, char replaceWith)
@@ -53,16 +58,17 @@ string MakeCanonical(const string& str)
 //-----------------------------------------------------------------------------
 
 u32 boba::Scene::nextObjectId = 1;
-extern bool SaveScene(const boba::Scene& scene, const boba::Options& options);
+extern bool SaveScene(
+    const boba::Scene& scene, const boba::Options& options, boba::SceneStats* stats);
 
 //-----------------------------------------------------------------------------
 boba::Scene scene;
 boba::Options options;
 
-#define LOG(lvl, fmt, ...)                                                                                   \
-  if (options.verbosity >= lvl)                                                                              \
-    printf(fmt, __VA_ARGS__);                                                                                \
-  if (options.logfile)                                                                                       \
+#define LOG(lvl, fmt, ...)                                                                         \
+  if (options.verbosity >= lvl)                                                                    \
+    printf(fmt, __VA_ARGS__);                                                                      \
+  if (options.logfile)                                                                             \
     fprintf(options.logfile, fmt, __VA_ARGS__);
 
 #define RANGE(c) (c).begin(), (c).end()
@@ -209,7 +215,7 @@ void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
   for (int i = 2; i < vertexCount; ++i)
   {
     float cand = (center - verts[i]).GetSquaredLength();
-    radius = max(radius, cand); 
+    radius = max(radius, cand);
   }
 
   mesh->boundingSphere.center = center;
@@ -312,8 +318,10 @@ void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
       }
       else if (hasPhongTag)
       {
-        Add3Vector3(
-            &mesh->normals, phongNormals[i * 4 + 0], phongNormals[i * 4 + 1], phongNormals[i * 4 + 2]);
+        Add3Vector3(&mesh->normals,
+            phongNormals[i * 4 + 0],
+            phongNormals[i * 4 + 1],
+            phongNormals[i * 4 + 2]);
 
         if (isQuad)
         {
@@ -388,7 +396,8 @@ void CollectMaterials(AlienBaseDocument* c4dDoc)
     {
       exporterMaterial->flags |= boba::Material::FLAG_REFLECTION;
       exporterMaterial->reflection.brightness = GetFloatParam(mat, MATERIAL_REFLECTION_BRIGHTNESS);
-      exporterMaterial->reflection.color = GetVectorParam<boba::Color>(mat, MATERIAL_REFLECTION_COLOR);
+      exporterMaterial->reflection.color =
+          GetVectorParam<boba::Color>(mat, MATERIAL_REFLECTION_COLOR);
     }
   }
 }
@@ -511,12 +520,68 @@ Bool AlienPrimitiveObjectData::Execute()
 }
 
 //-----------------------------------------------------------------------------
+void CollectionAnimationTracks(BaseList2D* bl, vector<boba::Track>* tracks)
+{
+  if (!bl || !bl->GetFirstCTrack())
+    return;
+
+  for (CTrack* ct = bl->GetFirstCTrack(); ct; ct = ct->GetNext())
+  {
+    // CTrack name
+    boba::Track track;
+    track.name = CopyString(ct->GetName());
+
+    // time track
+    CTrack* tt = ct->GetTimeTrack(bl->GetDocument());
+    if (tt)
+    {
+      LOG(1, "Time track is unsupported");
+    }
+
+    // get DescLevel id
+    DescID testID = ct->GetDescriptionID();
+    DescLevel lv = testID[0];
+    ct->SetDescriptionID(ct, testID);
+
+    // get CCurve and print key frame data
+    CCurve* cc = ct->GetCurve();
+    if (cc)
+    {
+      boba::Curve curve;
+      curve.name = CopyString(cc->GetName());
+
+      for (Int32 k = 0; k < cc->GetKeyCount(); k++)
+      {
+        CKey* ck = cc->GetKey(k);
+        BaseTime t = ck->GetTime();
+        if (ct->GetTrackCategory() == PSEUDO_VALUE)
+        {
+          curve.keyframes.push_back(boba::Keyframe{(int)t.GetFrame(g_Doc->GetFps()), ck->GetValue()});
+        }
+        else if (ct->GetTrackCategory() == PSEUDO_PLUGIN && ct->GetType() == CTpla)
+        {
+          LOG(1, "Plugin keyframes are unsupported");
+        }
+        else if (ct->GetTrackCategory() == PSEUDO_PLUGIN && ct->GetType() == CTmorph)
+        {
+          LOG(1, "Morph keyframes are unsupported");
+        }
+      }
+
+      track.curves.push_back(curve);
+    }
+    tracks->push_back(track);
+  }
+}
+
+//-----------------------------------------------------------------------------
 Bool AlienPolygonObjectData::Execute()
 {
   BaseObject* baseObj = (BaseObject*)GetNode();
   PolygonObject* polyObj = (PolygonObject*)baseObj;
 
   boba::Mesh* mesh = new boba::Mesh(baseObj);
+  CollectionAnimationTracks(baseObj, &mesh->animTracks);
 
   CollectMeshMaterials(polyObj, mesh);
   CollectVertices(polyObj, mesh);
@@ -546,18 +611,23 @@ Bool AlienCameraObjectData::Execute()
   int projectionType = GetInt32Param(baseObj, CAMERA_PROJECTION);
   if (projectionType != Pperspective)
   {
-    LOG(2, "Skipping camera (%s) with unsupported projection type (%d)\n", name.c_str(), projectionType);
+    LOG(2,
+        "Skipping camera (%s) with unsupported projection type (%d)\n",
+        name.c_str(),
+        projectionType);
     return false;
   }
 
   boba::Camera* camera = new boba::Camera(baseObj);
+  CollectionAnimationTracks(baseObj, &camera->animTracks);
   CopyMatrix(baseObj->GetMl(), camera->mtxLocal);
   CopyMatrix(baseObj->GetMg(), camera->mtxGlobal);
 
   camera->verticalFov = GetFloatParam(baseObj, CAMERAOBJECT_FOV_VERTICAL);
-  camera->nearPlane = GetInt32Param(baseObj, CAMERAOBJECT_NEAR_CLIPPING_ENABLE)
-                          ? max(DEFAULT_NEAR_PLANE, GetFloatParam(baseObj, CAMERAOBJECT_NEAR_CLIPPING))
-                          : DEFAULT_NEAR_PLANE;
+  camera->nearPlane =
+      GetInt32Param(baseObj, CAMERAOBJECT_NEAR_CLIPPING_ENABLE)
+          ? max(DEFAULT_NEAR_PLANE, GetFloatParam(baseObj, CAMERAOBJECT_NEAR_CLIPPING))
+          : DEFAULT_NEAR_PLANE;
   camera->farPlane = GetInt32Param(baseObj, CAMERAOBJECT_FAR_CLIPPING_ENABLE)
                          ? GetFloatParam(baseObj, CAMERAOBJECT_FAR_CLIPPING)
                          : DEFAULT_FAR_PLANE;
@@ -611,6 +681,7 @@ bool AlienNullObjectData::Execute()
   const string name = CopyString(baseObj->GetName());
 
   boba::NullObject* nullObject = new boba::NullObject(baseObj);
+  CollectionAnimationTracks(baseObj, &nullObject->animTracks);
   CopyMatrix(baseObj->GetMl(), nullObject->mtxLocal);
   CopyMatrix(baseObj->GetMg(), nullObject->mtxGlobal);
 
@@ -619,7 +690,7 @@ bool AlienNullObjectData::Execute()
   // Export spline objects that are children to the null object
   vector<BaseObject*> children;
   GetChildren(baseObj, &children);
-  for (BaseObject* obj: children)
+  for (BaseObject* obj : children)
   {
     Int32 type = obj->GetType();
     switch (type)
@@ -631,7 +702,6 @@ bool AlienNullObjectData::Execute()
       }
     }
   }
-
 
   return true;
 }
@@ -650,6 +720,7 @@ bool AlienLightObjectData::Execute()
   }
 
   boba::Light* light = new boba::Light(baseObj);
+  CollectionAnimationTracks(baseObj, &light->animTracks);
   CopyMatrix(baseObj->GetMl(), light->mtxLocal);
   CopyMatrix(baseObj->GetMg(), light->mtxGlobal);
 
@@ -795,53 +866,73 @@ int main(int argc, char** argv)
   if (int res = ParseOptions(argc, argv))
     return res;
 
-  {
-    time_t t = time(0);
-    struct tm* now = localtime(&t);
+  time_t startTime = time(0);
+  struct tm* now = localtime(&startTime);
 
-    LOG(1,
-        "==] STARTING [=================================] %.4d:%.2d:%.2d-%.2d:%.2d:%.2d ]==\n%s -> %s\n",
-        now->tm_year + 1900,
-        now->tm_mon + 1,
-        now->tm_mday,
-        now->tm_hour,
-        now->tm_min,
-        now->tm_sec,
-        options.inputFilename.c_str(),
-        options.outputFilename.c_str());
-  }
+  LOG(1,
+      "==] STARTING [=================================] %.4d:%.2d:%.2d-%.2d:%.2d:%.2d ]==\n%s -> "
+      "%s\n",
+      now->tm_year + 1900,
+      now->tm_mon + 1,
+      now->tm_mday,
+      now->tm_hour,
+      now->tm_min,
+      now->tm_sec,
+      options.inputFilename.c_str(),
+      options.outputFilename.c_str());
 
-  AlienBaseDocument* C4Ddoc = NewObj(AlienBaseDocument);
-  HyperFile* C4Dfile = NewObj(HyperFile);
+  g_Doc = NewObj(AlienBaseDocument);
+  g_File = NewObj(HyperFile);
 
-  if (!C4Dfile->Open(DOC_IDENT, options.inputFilename.c_str(), FILEOPEN_READ))
+  if (!g_File->Open(DOC_IDENT, options.inputFilename.c_str(), FILEOPEN_READ))
     return 1;
 
-  if (!C4Ddoc->ReadObject(C4Dfile, true))
+  if (!g_Doc->ReadObject(g_File, true))
     return 1;
 
-  C4Dfile->Close();
+  g_File->Close();
 
-  CollectMaterials(C4Ddoc);
-  C4Ddoc->CreateSceneFromC4D();
-  SaveScene(scene, options);
+  CollectMaterials(g_Doc);
+  g_Doc->CreateSceneFromC4D();
 
-  DeleteObj(C4Ddoc);
-  DeleteObj(C4Dfile);
+  int fps = g_Doc->GetFps();
 
-  {
-    time_t t = time(0);
-    struct tm* now = localtime(&t);
+  boba::SceneStats stats;
+  SaveScene(scene, options, &stats);
 
-    LOG(1,
-        "==] DONE [=====================================] %.4d:%.2d:%.2d-%.2d:%.2d:%.2d ]==\n",
-        now->tm_year + 1900,
-        now->tm_mon + 1,
-        now->tm_mday,
-        now->tm_hour,
-        now->tm_min,
-        now->tm_sec);
-  }
+  DeleteObj(g_Doc);
+  DeleteObj(g_File);
+
+  time_t endTime = time(0);
+  now = localtime(&endTime);
+
+  LOG(1,
+      "--> stats: \n"
+      "    null object size: %.2f kb\n"
+      "    camera object size: %.2f kb\n"
+      "    mesh object size: %.2f kb\n"
+      "    light object size: %.2f kb\n"
+      "    material object size: %.2f kb\n"
+      "    spline object size: %.2f kb\n"
+      "    animation object size: %.2f kb\n"
+      "    data object size: %.2f kb\n",
+      (float)stats.nullObjectSize / 1024,
+      (float)stats.cameraSize / 1024,
+      (float)stats.meshSize / 1024,
+      (float)stats.lightSize / 1024,
+      (float)stats.materialSize / 1024,
+      (float)stats.splineSize / 1024,
+      (float)stats.animationSize / 1024,
+      (float)stats.dataSize / 1024);
+
+  LOG(1,
+      "==] DONE [=====================================] %.4d:%.2d:%.2d-%.2d:%.2d:%.2d ]==\n",
+      now->tm_year + 1900,
+      now->tm_mon + 1,
+      now->tm_mday,
+      now->tm_hour,
+      now->tm_min,
+      now->tm_sec);
 
   if (options.logfile)
     fclose(options.logfile);

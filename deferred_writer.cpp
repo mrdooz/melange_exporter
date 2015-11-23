@@ -123,7 +123,7 @@ void DeferredWriter::WriteRaw(const void *data, int len)
 }
 
 //------------------------------------------------------------------------------
-int DeferredWriter::GetFilePos()
+int DeferredWriter::GetFilePos() const
 {
   return ftell(_f);
 }

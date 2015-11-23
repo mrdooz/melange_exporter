@@ -17,7 +17,19 @@ void SaveNullObject(const NullObject* nullObject, const Options& options, Deferr
 void SaveSpline(const Spline* spline, const Options& options, DeferredWriter& writer);
 
 //------------------------------------------------------------------------------
-bool SaveScene(const Scene& scene, const Options& options)
+struct ScopedStats
+{
+  ScopedStats(const boba::DeferredWriter& writer, int* val) : writer(writer), val(val)
+  {
+    *val = writer.GetFilePos();
+  }
+  ~ScopedStats() { *val = -(*val - writer.GetFilePos()); }
+  const boba::DeferredWriter& writer;
+  int* val;
+};
+
+//------------------------------------------------------------------------------
+bool SaveScene(const Scene& scene, const Options& options, SceneStats* stats)
 {
   boba::DeferredWriter writer;
   if (!writer.Open(options.outputFilename.c_str()))
@@ -36,50 +48,71 @@ bool SaveScene(const Scene& scene, const Options& options)
   // dummy write the header
   writer.Write(header);
 
-  header.numNullObjects = (u32)scene.nullObjects.size();
-  header.nullObjectDataStart = header.numNullObjects ? (u32)writer.GetFilePos() : 0;
-  for (NullObject* obj : scene.nullObjects)
   {
-    SaveNullObject(obj, options, writer);
+    ScopedStats s(writer, &stats->nullObjectSize);
+    header.numNullObjects = (u32)scene.nullObjects.size();
+    header.nullObjectDataStart = header.numNullObjects ? (u32)writer.GetFilePos() : 0;
+    for (NullObject* obj : scene.nullObjects)
+    {
+      SaveNullObject(obj, options, writer);
+    }
   }
 
-  header.numMeshes = (u32)scene.meshes.size();
-  header.meshDataStart = header.numMeshes ? (u32)writer.GetFilePos() : 0;
-  for (Mesh* mesh : scene.meshes)
   {
-    SaveMesh(mesh, options, writer);
+    ScopedStats s(writer, &stats->meshSize);
+    header.numMeshes = (u32)scene.meshes.size();
+    header.meshDataStart = header.numMeshes ? (u32)writer.GetFilePos() : 0;
+    for (Mesh* mesh : scene.meshes)
+    {
+      SaveMesh(mesh, options, writer);
+    }
   }
 
-  header.numLights = (u32)scene.lights.size();
-  header.lightDataStart = header.numLights ? (u32)writer.GetFilePos() : 0;
-  for (const Light* light : scene.lights)
   {
-    SaveLight(light, options, writer);
+    ScopedStats s(writer, &stats->lightSize);
+    header.numLights = (u32)scene.lights.size();
+    header.lightDataStart = header.numLights ? (u32)writer.GetFilePos() : 0;
+    for (const Light* light : scene.lights)
+    {
+      SaveLight(light, options, writer);
+    }
   }
 
-  header.numCameras = (u32)scene.cameras.size();
-  header.cameraDataStart = header.numCameras ? (u32)writer.GetFilePos() : 0;
-  for (const Camera* camera : scene.cameras)
   {
-    SaveCamera(camera, options, writer);
+    ScopedStats s(writer, &stats->cameraSize);
+    header.numCameras = (u32)scene.cameras.size();
+    header.cameraDataStart = header.numCameras ? (u32)writer.GetFilePos() : 0;
+    for (const Camera* camera : scene.cameras)
+    {
+      SaveCamera(camera, options, writer);
+    }
   }
 
-  header.numMaterials = (u32)scene.materials.size();
-  header.materialDataStart = header.numMaterials ? (u32)writer.GetFilePos() : 0;
-  for (const Material* material : scene.materials)
   {
-    SaveMaterial(material, options, writer);
+    ScopedStats s(writer, &stats->materialSize);
+    header.numMaterials = (u32)scene.materials.size();
+    header.materialDataStart = header.numMaterials ? (u32)writer.GetFilePos() : 0;
+    for (const Material* material : scene.materials)
+    {
+      SaveMaterial(material, options, writer);
+    }
   }
 
-  header.numSplines = (u32)scene.splines.size();
-  header.splineDataStart = header.numSplines ? (u32)writer.GetFilePos() : 0;
-  for (const Spline* spline : scene.splines)
   {
-    SaveSpline(spline, options, writer);
+    ScopedStats s(writer, &stats->splineSize);
+    header.numSplines = (u32)scene.splines.size();
+    header.splineDataStart = header.numSplines ? (u32)writer.GetFilePos() : 0;
+    for (const Spline* spline : scene.splines)
+    {
+      SaveSpline(spline, options, writer);
+    }
   }
 
-  header.fixupOffset = (u32)writer.GetFilePos();
-  writer.WriteDeferredData();
+  {
+    ScopedStats s(writer, &stats->dataSize);
+    header.fixupOffset = (u32)writer.GetFilePos();
+    writer.WriteDeferredData();
+  }
 
   // write back the correct header
   writer.SetFilePos(0);
@@ -141,12 +174,14 @@ void SaveBase(const BaseObject* base, const Options& options, DeferredWriter& wr
   writer.Write(base->parent ? base->parent->id : (u32)~0u);
   writer.Write(base->mtxLocal);
   writer.Write(base->mtxGlobal);
+  int a = 10;
 }
 
 //------------------------------------------------------------------------------
 void SaveMesh(Mesh* mesh, const Options& options, DeferredWriter& writer)
 {
   bool useCompression = false;
+  bool optimizeFaces = false;
 
   // Compression stats:
   // org: 2,030,104 crystals_flat.boba
@@ -222,13 +257,16 @@ void SaveMesh(Mesh* mesh, const Options& options, DeferredWriter& writer)
     }
   }
 
-  vector<int> optimizedIndices(mesh->indices.size());
-  Forsyth::OptimizeFaces((const u32*)mesh->indices.data(),
+  if (optimizeFaces)
+  {
+    vector<int> optimizedIndices(mesh->indices.size());
+    Forsyth::OptimizeFaces((const u32*)mesh->indices.data(),
       (u32)mesh->indices.size(),
       (u32)mesh->verts.size() / 3,
       (u32*)optimizedIndices.data(),
       32);
-  mesh->indices.swap(optimizedIndices);
+    mesh->indices.swap(optimizedIndices);
+  }
 
   if (useCompression)
   {

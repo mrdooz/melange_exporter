@@ -64,6 +64,27 @@ namespace boba
   };
 
   //------------------------------------------------------------------------------
+  struct Keyframe
+  {
+    int frame;
+    float value;
+  };
+
+  //------------------------------------------------------------------------------
+  struct Curve
+  {
+    string name;
+    vector<Keyframe> keyframes;
+  };
+
+  //------------------------------------------------------------------------------
+  struct Track
+  {
+    string name;
+    vector<Curve> curves;
+  };
+
+  //------------------------------------------------------------------------------
   struct BaseObject
   {
     BaseObject(melange::BaseObject* melangeObj);
@@ -74,6 +95,8 @@ namespace boba
     float mtxGlobal[12];
     string name;
     u32 id = ~0u;
+
+    vector<Track> animTracks;
   };
 
   //------------------------------------------------------------------------------
@@ -166,6 +189,19 @@ namespace boba
 
   //------------------------------------------------------------------------------
   struct Options;
+
+  struct SceneStats
+  {
+    int nullObjectSize = 0;
+    int cameraSize = 0;
+    int meshSize = 0;
+    int lightSize = 0;
+    int materialSize = 0;
+    int splineSize = 0;
+    int animationSize = 0;
+    int dataSize = 0;
+  };
+
   struct Scene
   {
     boba::BaseObject* FindObject(melange::BaseObject* obj);

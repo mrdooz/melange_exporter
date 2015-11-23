@@ -80,7 +80,7 @@ namespace boba
     void StartBlockMarker();
     void EndBlockMarker();
 
-    int GetFilePos();
+    int GetFilePos() const;
     void SetFilePos(int p);
 
   private:

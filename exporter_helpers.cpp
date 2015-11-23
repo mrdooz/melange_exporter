@@ -98,3 +98,165 @@ namespace melange
     mem = NULL;
   }
 }
+
+
+// prints animation track and key infos to the console
+static void PrintAnimInfo(BaseList2D* bl)
+{
+  if (!bl || !bl->GetFirstCTrack())
+    return;
+
+  printf("\n   # Animation Info #");
+
+  Int32 tn = 0;
+  CTrack* ct = bl->GetFirstCTrack();
+  while (ct)
+  {
+    // CTrack name
+    Char* pChar = ct->GetName().GetCStringCopy();
+    if (pChar)
+    {
+      printf("\n   %d. CTrack \"%s\"!\n", (int)++tn, pChar);
+      DeleteMem(pChar);
+    }
+    else
+      printf("\n   %d. CTrack !\n", (int)++tn);
+
+    // time track
+    CTrack* tt = ct->GetTimeTrack(bl->GetDocument());
+    if (tt)
+    {
+      printf("\n   -> has TimeTrack !\n");
+      CCurve* tcc = ct->GetCurve();
+      if (tcc)
+      {
+        printf("    Has CCurve with %d Keys\n", (int)tcc->GetKeyCount());
+
+        CKey* ck = nullptr;
+        BaseTime t;
+        for (Int32 k = 0; k < tcc->GetKeyCount(); k++)
+        {
+          ck = tcc->GetKey(k);
+          t = ck->GetTime();
+          printf("     %d. Key : %d - %f\n", (int)k + 1, (int)t.GetFrame(25), ck->GetValue());
+        }
+      }
+    }
+
+    // get DescLevel id
+    DescID testID = ct->GetDescriptionID();
+    DescLevel lv = testID[0];
+    ct->SetDescriptionID(ct, testID);
+    printf("   DescID->DescLevel->ID: %d\n", (int)lv.id);
+
+    // CTrack type
+    switch (ct->GetTrackCategory())
+    {
+    case PSEUDO_VALUE: printf("   VALUE - Track found!\n"); break;
+
+    case PSEUDO_DATA: printf("   DATA - Track found!\n"); break;
+
+    case PSEUDO_PLUGIN:
+      if (ct->GetType() == CTpla)
+        printf("   PLA - Track found!\n");
+      else if (ct->GetType() == CTdynamicspline)
+        printf("   Dynamic Spline Data - Track found!\n");
+      else if (ct->GetType() == CTmorph)
+        printf("   MORPH - Track found!\n");
+      else
+        printf("   unknown PLUGIN - Track found!\n");
+      break;
+
+    case PSEUDO_UNDEF:
+    default: printf("   UNDEFINDED - Track found!\n");
+    }
+
+    // get CCurve and print key frame data
+    CCurve* cc = ct->GetCurve();
+    if (cc)
+    {
+      printf("   Has CCurve with %d Keys\n", (int)cc->GetKeyCount());
+
+      CKey* ck = nullptr;
+      BaseTime t;
+      for (Int32 k = 0; k < cc->GetKeyCount(); k++)
+      {
+        ck = cc->GetKey(k);
+
+        t = ck->GetTime();
+        if (ct->GetTrackCategory() == PSEUDO_VALUE)
+        {
+          printf("    %d. Key : %d - %f\n", (int)k + 1, (int)t.GetFrame(25), ck->GetValue());
+        }
+        else if (ct->GetTrackCategory() == PSEUDO_PLUGIN && ct->GetType() == CTpla)
+        {
+          GeData ptData;
+          printf("    %d. Key : %d - ", (int)k + 1, (int)t.GetFrame(25));
+
+          // bias
+          if (ck->GetParameter(CK_PLA_BIAS, ptData) && ptData.GetType() == DA_REAL)
+            printf("Bias = %.2f - ", ptData.GetFloat());
+
+          // smooth
+          if (ck->GetParameter(CK_PLA_CUBIC, ptData) && ptData.GetType() == DA_LONG)
+            printf("Smooth = %d - ", (int)ptData.GetInt32());
+
+          // pla data
+          if (ck->GetParameter(CK_PLA_DATA, ptData))
+          {
+            PLAData* plaData = (PLAData*)ptData.GetCustomDataType(CUSTOMDATATYPE_PLA);
+            PointTag* poiTag;
+            TangentTag* tanTag;
+            plaData->GetVariableTags(poiTag, tanTag);
+            if (poiTag && poiTag->GetCount() > 0)
+            {
+              Vector* a = poiTag->GetPointAdr();
+              // print values for first point only
+              printf("%.3f / %.3f / %.3f", a[0].x, a[0].y, a[0].z);
+            }
+            else
+              printf("no points?");
+          }
+
+          printf("\n");
+        }
+        else if (ct->GetTrackCategory() == PSEUDO_PLUGIN && ct->GetType() == CTmorph)
+        {
+          GeData mtData;
+          printf("    %d. Key : %d - ", (int)k + 1, (int)t.GetFrame(25));
+
+          // bias
+          if (ck->GetParameter(CK_MORPH_BIAS, mtData) && mtData.GetType() == DA_REAL)
+            printf("Bias = %.2f - ", mtData.GetFloat());
+
+          // smooth
+          if (ck->GetParameter(CK_MORPH_CUBIC, mtData) && mtData.GetType() == DA_LONG)
+            printf("Smooth = %d - ", (int)mtData.GetInt32());
+
+          // link to target object
+          if (ck->GetParameter(CK_MORPH_LINK, mtData))
+          {
+            BaseObject* targetObject = (BaseObject*)mtData.GetLink();
+            if (targetObject)
+            {
+              Char* pTargetChar = targetObject->GetName().GetCStringCopy();
+              if (pTargetChar)
+              {
+                printf("Target Object = %s", pTargetChar);
+                DeleteMem(pTargetChar);
+              }
+              else
+                printf("no target object name");
+            }
+            else
+              printf("no target object defined...");
+          }
+
+          printf("\n");
+        }
+      } // for
+    }
+    ct = ct->GetNext();
+  }
+  printf("\n");
+}
