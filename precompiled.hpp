@@ -1,0 +1,27 @@
+#pragma once
+
+#include <stdio.h>
+#include <assert.h>
+#include <stdint.h>
+#include <time.h>
+
+#include <vector>
+#include <deque>
+#include <unordered_map>
+#include <set>
+#include <map>
+#include <algorithm>
+#include <unordered_set>
+#include <functional>
+
+#include <c4d_file.h>
+#include <c4d_ccurve.h>
+#include <c4d_ctrack.h>
+
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+
+typedef int8_t s8;
+typedef int16_t s16;
+typedef int32_t s32;

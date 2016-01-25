@@ -3,7 +3,7 @@
 using namespace melange;
 
 // overload this function and fill in your own unique data
-void GetWriterInfo(Int32 &id, String &appname)
+void GetWriterInfo(Int32& id, String& appname)
 {
   // register your own pluginid once for your exporter and enter it here under id
   // this id must be used for your own unique ids
@@ -16,30 +16,48 @@ void GetWriterInfo(Int32 &id, String &appname)
 }
 
 //-----------------------------------------------------------------------------
-RootMaterial *AllocAlienRootMaterial()			{ return NewObj(RootMaterial); }
-RootObject *AllocAlienRootObject()					{ return NewObj(RootObject); }
-RootLayer *AllocAlienRootLayer()						{ return NewObj(RootLayer); }
-RootRenderData *AllocAlienRootRenderData()	{ return NewObj(RootRenderData); }
-RootViewPanel *AllocC4DRootViewPanel()			{ return NewObj(RootViewPanel); }
-LayerObject *AllocAlienLayer()							{ return NewObj(LayerObject); }
+RootMaterial* AllocAlienRootMaterial()
+{
+  return NewObj(RootMaterial);
+}
+RootObject* AllocAlienRootObject()
+{
+  return NewObj(RootObject);
+}
+RootLayer* AllocAlienRootLayer()
+{
+  return NewObj(RootLayer);
+}
+RootRenderData* AllocAlienRootRenderData()
+{
+  return NewObj(RootRenderData);
+}
+RootViewPanel* AllocC4DRootViewPanel()
+{
+  return NewObj(RootViewPanel);
+}
+LayerObject* AllocAlienLayer()
+{
+  return NewObj(LayerObject);
+}
 
 //-----------------------------------------------------------------------------
-NodeData *AllocAlienObjectData(Int32 id, Bool &known)
+NodeData* AllocAlienObjectData(Int32 id, Bool& known)
 {
-  NodeData *m_data = NULL;
+  NodeData* m_data = NULL;
   switch (id)
   {
     // supported element types
-    case Opolygon:  m_data = NewObj(AlienPolygonObjectData); break;
-    case Ocamera:   m_data = NewObj(AlienCameraObjectData); break;
-    case Onull:     m_data = NewObj(AlienNullObjectData); break;
-    case Olight:    m_data = NewObj(AlienLightObjectData); break;
-    case Opoint:   m_data = NewObj(AlienPointObjectData); break;
-    case Osphere:   m_data = NewObj(AlienPrimitiveObjectData); break;
-    case Ocube:     m_data = NewObj(AlienPrimitiveObjectData); break;
-    case Oplane:    m_data = NewObj(AlienPrimitiveObjectData); break;
-    case Ocone:     m_data = NewObj(AlienPrimitiveObjectData); break;
-    case Otorus:    m_data = NewObj(AlienPrimitiveObjectData); break;
+    case Opolygon: m_data = NewObj(AlienPolygonObjectData); break;
+    case Ocamera: m_data = NewObj(AlienCameraObjectData); break;
+    case Onull: m_data = NewObj(AlienNullObjectData); break;
+    case Olight: m_data = NewObj(AlienLightObjectData); break;
+    case Opoint: m_data = NewObj(AlienPointObjectData); break;
+    case Osphere: m_data = NewObj(AlienPrimitiveObjectData); break;
+    case Ocube: m_data = NewObj(AlienPrimitiveObjectData); break;
+    case Oplane: m_data = NewObj(AlienPrimitiveObjectData); break;
+    case Ocone: m_data = NewObj(AlienPrimitiveObjectData); break;
+    case Otorus: m_data = NewObj(AlienPrimitiveObjectData); break;
     case Ocylinder: m_data = NewObj(AlienPrimitiveObjectData); break;
   }
 
@@ -47,10 +65,10 @@ NodeData *AllocAlienObjectData(Int32 id, Bool &known)
   return m_data;
 }
 
-
 //-----------------------------------------------------------------------------
-// allocate the plugin tag elements data (only few tags have additional data which is stored in a NodeData)
-NodeData *AllocAlienTagData(Int32 id, Bool &known)
+// allocate the plugin tag elements data (only few tags have additional data which is stored in a
+// NodeData)
+NodeData* AllocAlienTagData(Int32 id, Bool& known)
 {
   return 0;
 }
@@ -65,31 +83,32 @@ Bool BaseDocument::CreateSceneToC4D(Bool selectedonly)
 //-----------------------------------------------------------------------------
 namespace melange
 {
-  // memory allocation functions inside _melange_ namespace (if you have your own memory management you can overload these functions)
+  // memory allocation functions inside _melange_ namespace (if you have your own memory management
+  // you can overload these functions)
   // alloc memory no clear
-  void *MemAllocNC(Int size)
+  void* MemAllocNC(Int size)
   {
-    void *mem = malloc(size);
+    void* mem = malloc(size);
     return mem;
   }
 
   // alloc memory set to 0
-  void *MemAlloc(Int size)
+  void* MemAlloc(Int size)
   {
-    void *mem = MemAllocNC(size);
+    void* mem = MemAllocNC(size);
     memset(mem, 0, size);
     return mem;
   }
 
   // realloc existing memory
-  void *MemRealloc(void* orimem, Int size)
+  void* MemRealloc(void* orimem, Int size)
   {
-    void *mem = realloc(orimem, size);
+    void* mem = realloc(orimem, size);
     return mem;
   }
 
   // free memory and set pointer to null
-  void MemFree(void *&mem)
+  void MemFree(void*& mem)
   {
     if (!mem)
       return;
@@ -98,7 +117,6 @@ namespace melange
     mem = NULL;
   }
 }
-
 
 // prints animation track and key infos to the console
 static void PrintAnimInfo(BaseList2D* bl)
@@ -152,23 +170,23 @@ static void PrintAnimInfo(BaseList2D* bl)
     // CTrack type
     switch (ct->GetTrackCategory())
     {
-    case PSEUDO_VALUE: printf("   VALUE - Track found!\n"); break;
+      case PSEUDO_VALUE: printf("   VALUE - Track found!\n"); break;
 
-    case PSEUDO_DATA: printf("   DATA - Track found!\n"); break;
+      case PSEUDO_DATA: printf("   DATA - Track found!\n"); break;
 
-    case PSEUDO_PLUGIN:
-      if (ct->GetType() == CTpla)
-        printf("   PLA - Track found!\n");
-      else if (ct->GetType() == CTdynamicspline)
-        printf("   Dynamic Spline Data - Track found!\n");
-      else if (ct->GetType() == CTmorph)
-        printf("   MORPH - Track found!\n");
-      else
-        printf("   unknown PLUGIN - Track found!\n");
-      break;
+      case PSEUDO_PLUGIN:
+        if (ct->GetType() == CTpla)
+          printf("   PLA - Track found!\n");
+        else if (ct->GetType() == CTdynamicspline)
+          printf("   Dynamic Spline Data - Track found!\n");
+        else if (ct->GetType() == CTmorph)
+          printf("   MORPH - Track found!\n");
+        else
+          printf("   unknown PLUGIN - Track found!\n");
+        break;
 
-    case PSEUDO_UNDEF:
-    default: printf("   UNDEFINDED - Track found!\n");
+      case PSEUDO_UNDEF:
+      default: printf("   UNDEFINDED - Track found!\n");
     }
 
     // get CCurve and print key frame data

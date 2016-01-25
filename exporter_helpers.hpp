@@ -1,13 +1,6 @@
 // Mostly contains stuff that's required by melange, and is kinda boilerplate
 
 #pragma once
-#include <c4d_file.h>
-#include <c4d_ccurve.h>
-#include <c4d_ctrack.h>
-#include <stdint.h>
-#include <string>
-#include <vector>
-#include <unordered_map>
 
 namespace melange
 {

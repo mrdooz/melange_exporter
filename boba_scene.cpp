@@ -1,13 +1,15 @@
-#include "exporter.hpp"
-#include "deferred_writer.hpp"
 #include "boba_scene_format.hpp"
+#include "deferred_writer.hpp"
+#include "exporter.hpp"
 
+#include "compress/forsythtriangleorderoptimizer.h"
 #include "compress/indexbuffercompression.h"
 #include "compress/indexbufferdecompression.h"
-#include "compress/forsythtriangleorderoptimizer.h"
 #include "compress/oct.h"
 
 using namespace boba;
+
+static const int SCENE_VERSION = 3;
 
 void SaveMaterial(const Material* material, const Options& options, DeferredWriter& writer);
 void SaveMesh(Mesh* mesh, const Options& options, DeferredWriter& writer);
@@ -43,7 +45,7 @@ bool SaveScene(const Scene& scene, const Options& options, SceneStats* stats)
   header.id[3] = 'a';
 
   header.flags = 0;
-  header.version = 2;
+  header.version = SCENE_VERSION;
 
   // dummy write the header
   writer.Write(header);
@@ -130,13 +132,16 @@ void SaveMaterial(const Material* material, const Options& options, DeferredWrit
   writer.Write(material->id);
   writer.Write(material->flags);
 
-  u32 colorFixup = (material->flags & Material::FLAG_COLOR) ? writer.CreateFixup() : ~0u;
+  u32 colorFixup =
+      (material->flags & Material::FLAG_COLOR) ? writer.CreateFixup() : protocol::INVALID_OBJECT_ID;
   writer.WritePtr(0);
 
-  u32 luminanceFixup = (material->flags & Material::FLAG_LUMINANCE) ? writer.CreateFixup() : ~0u;
+  u32 luminanceFixup = (material->flags & Material::FLAG_LUMINANCE) ? writer.CreateFixup()
+                                                                    : protocol::INVALID_OBJECT_ID;
   writer.WritePtr(0);
 
-  u32 reflectionFixup = (material->flags & Material::FLAG_REFLECTION) ? writer.CreateFixup() : ~0u;
+  u32 reflectionFixup = (material->flags & Material::FLAG_REFLECTION) ? writer.CreateFixup()
+                                                                      : protocol::INVALID_OBJECT_ID;
   writer.WritePtr(0);
 
   if (material->flags & Material::FLAG_COLOR)
@@ -171,10 +176,9 @@ void SaveBase(const BaseObject* base, const Options& options, DeferredWriter& wr
 {
   writer.AddDeferredString(base->name);
   writer.Write(base->id);
-  writer.Write(base->parent ? base->parent->id : (u32)~0u);
+  writer.Write(base->parent ? base->parent->id : protocol::INVALID_OBJECT_ID);
   writer.Write(base->mtxLocal);
   writer.Write(base->mtxGlobal);
-  int a = 10;
 }
 
 //------------------------------------------------------------------------------
@@ -203,8 +207,7 @@ void SaveMesh(Mesh* mesh, const Options& options, DeferredWriter& writer)
     size_t numNormals = mesh->normals.size() / 3;
     vector<s16> compressedNormals(numNormals * 2);
 
-    auto Normalize = [](float* v)
-    {
+    auto Normalize = [](float* v) {
       float x = v[0];
       float y = v[1];
       float z = v[2];
@@ -261,10 +264,10 @@ void SaveMesh(Mesh* mesh, const Options& options, DeferredWriter& writer)
   {
     vector<int> optimizedIndices(mesh->indices.size());
     Forsyth::OptimizeFaces((const u32*)mesh->indices.data(),
-      (u32)mesh->indices.size(),
-      (u32)mesh->verts.size() / 3,
-      (u32*)optimizedIndices.data(),
-      32);
+        (u32)mesh->indices.size(),
+        (u32)mesh->verts.size() / 3,
+        (u32*)optimizedIndices.data(),
+        32);
     mesh->indices.swap(optimizedIndices);
   }
 
@@ -302,6 +305,7 @@ void SaveCamera(const Camera* camera, const Options& options, DeferredWriter& wr
   writer.Write(camera->verticalFov);
   writer.Write(camera->nearPlane);
   writer.Write(camera->farPlane);
+  writer.Write(camera->targetObj->id);
 }
 
 //------------------------------------------------------------------------------

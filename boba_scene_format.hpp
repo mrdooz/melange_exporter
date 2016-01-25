@@ -1,12 +1,15 @@
 #pragma once
-#include <stdint.h>
-
-typedef uint32_t u32;
 
 // This is the actual binary format saved on disk
 namespace protocol
 {
 #pragma pack(push, 1)
+
+  enum
+  {
+    INVALID_OBJECT_ID = 0xffffffff
+  };
+
   struct SceneBlob
   {
     char id[4];
@@ -71,6 +74,8 @@ namespace protocol
   {
     float verticalFov;
     float nearPlane, farPlane;
+    // new in version 3
+    u32 targetId = INVALID_OBJECT_ID;
   };
 
   struct LightBlob : public BlobBase

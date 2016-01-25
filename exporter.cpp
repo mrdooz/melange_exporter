@@ -8,19 +8,6 @@
 #include "boba_scene_format.hpp"
 #include "deferred_writer.hpp"
 
-#include <c4d_file.h>
-#include <c4d_ccurve.h>
-#include <c4d_ctrack.h>
-#include <stdio.h>
-#include <assert.h>
-#include <set>
-#include <map>
-#include <algorithm>
-#include <unordered_map>
-#include <unordered_set>
-
-#include <time.h>
-
 //-----------------------------------------------------------------------------
 using namespace melange;
 using namespace std;
@@ -32,6 +19,9 @@ namespace
 
   AlienBaseDocument* g_Doc;
   HyperFile* g_File;
+
+  // Fixup functions called after the scene has been read and processed.
+  vector<function<bool()>> g_deferredFunctions;
 }
 
 void CollectionAnimationTracks(BaseList2D* bl, vector<boba::Track>* tracks);
@@ -62,7 +52,7 @@ extern bool SaveScene(
     const boba::Scene& scene, const boba::Options& options, boba::SceneStats* stats);
 
 //-----------------------------------------------------------------------------
-boba::Scene scene;
+boba::Scene g_scene;
 boba::Options options;
 
 #define LOG(lvl, fmt, ...)                                                                         \
@@ -362,8 +352,8 @@ void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
 void CollectMaterials(AlienBaseDocument* c4dDoc)
 {
   // add default material
-  scene.materials.push_back(new boba::Material());
-  boba::Material* exporterMaterial = scene.materials.back();
+  g_scene.materials.push_back(new boba::Material());
+  boba::Material* exporterMaterial = g_scene.materials.back();
   exporterMaterial->mat = nullptr;
   exporterMaterial->name = "<default>";
   exporterMaterial->id = ~0u;
@@ -379,8 +369,8 @@ void CollectMaterials(AlienBaseDocument* c4dDoc)
 
     string name = CopyString(mat->GetName());
 
-    scene.materials.push_back(new boba::Material());
-    boba::Material* exporterMaterial = scene.materials.back();
+    g_scene.materials.push_back(new boba::Material());
+    boba::Material* exporterMaterial = g_scene.materials.back();
     exporterMaterial->mat = mat;
     exporterMaterial->name = name;
 
@@ -423,12 +413,12 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
       if (!mat)
         continue;
 
-      auto materialIt = find_if(RANGE(scene.materials),
+      auto materialIt = find_if(RANGE(g_scene.materials),
           [mat](const boba::Material* m)
           {
             return m->mat == mat;
           });
-      if (materialIt == scene.materials.end())
+      if (materialIt == g_scene.materials.end())
         continue;
 
       boba::Material* bobaMaterial = *materialIt;
@@ -489,7 +479,7 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
   for (auto g : mesh->polysByMaterial)
   {
     const char* materialName =
-        g.first == boba::DEFAULT_MATERIAL ? "<default>" : scene.materials[g.first]->name.c_str();
+        g.first == boba::DEFAULT_MATERIAL ? "<default>" : g_scene.materials[g.first]->name.c_str();
     LOG(2, "material: %s, %d polys\n", materialName, (int)g.second.size());
   }
 }
@@ -497,7 +487,7 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
 //-----------------------------------------------------------------------------
 boba::BaseObject::BaseObject(melange::BaseObject* melangeObj)
     : melangeObj(melangeObj)
-    , parent(scene.FindObject(melangeObj->GetUp()))
+    , parent(g_scene.FindObject(melangeObj->GetUp()))
     , name(CopyString(melangeObj->GetName()))
     , id(Scene::nextObjectId++)
 {
@@ -510,12 +500,16 @@ boba::BaseObject::BaseObject(melange::BaseObject* melangeObj)
         melangeParent ? CopyString(melangeParent->GetName()).c_str() : "");
   }
 
-  scene.objMap[melangeObj] = this;
+  g_scene.objMap[melangeObj] = this;
 }
 
 //-----------------------------------------------------------------------------
 Bool AlienPrimitiveObjectData::Execute()
 {
+  BaseObject* baseObj = (BaseObject*)GetNode();
+
+  string name(CopyString(baseObj->GetName()));
+  LOG(1, "Skipping primitive object: %s\n", name.c_str());
   return true;
 }
 
@@ -588,7 +582,7 @@ Bool AlienPolygonObjectData::Execute()
 
   CopyMatrix(polyObj->GetMl(), mesh->mtxLocal);
   CopyMatrix(polyObj->GetMg(), mesh->mtxGlobal);
-  scene.meshes.push_back(mesh);
+  g_scene.meshes.push_back(mesh);
 
   return true;
 }
@@ -599,13 +593,18 @@ Bool AlienCameraObjectData::Execute()
   BaseObject* baseObj = (BaseObject*)GetNode();
   const string name = CopyString(baseObj->GetName());
 
-  // we require the parent object to be a null object
-  BaseObject* parent = baseObj->GetUp();
-  bool isNullParent = parent && parent->GetType() == OBJECT_NULL;
-  if (!isNullParent)
+  // Check if the camera is a target camera
+  BaseTag* targetTag = baseObj->GetTag(Ttargetexpression);
+  if (!targetTag)
   {
-    LOG(1, "Camera's %s parent isn't a null object!\n", name.c_str());
-    return false;
+    // Not a target camera, so require the parten object to be a null object
+    BaseObject* parent = baseObj->GetUp();
+    bool isNullParent = parent && parent->GetType() == OBJECT_NULL;
+    if (!isNullParent)
+    {
+      LOG(1, "Camera's %s parent isn't a null object!\n", name.c_str());
+      return false;
+    }
   }
 
   int projectionType = GetInt32Param(baseObj, CAMERA_PROJECTION);
@@ -619,6 +618,21 @@ Bool AlienCameraObjectData::Execute()
   }
 
   boba::Camera* camera = new boba::Camera(baseObj);
+
+  if (targetTag)
+  {
+    BaseObject* targetObj = targetTag->GetDataInstance()->GetObjectLink(TARGETEXPRESSIONTAG_LINK);
+    g_deferredFunctions.push_back([=]() {
+      camera->targetObj = g_scene.FindObject(targetObj);
+      if (!camera->targetObj)
+      {
+        LOG(1, "Unable to find target object: %s", CopyString(targetObj->GetName()).c_str());
+        return false;
+      }
+      return true;
+    });
+  }
+
   CollectionAnimationTracks(baseObj, &camera->animTracks);
   CopyMatrix(baseObj->GetMl(), camera->mtxLocal);
   CopyMatrix(baseObj->GetMg(), camera->mtxGlobal);
@@ -632,7 +646,7 @@ Bool AlienCameraObjectData::Execute()
                          ? GetFloatParam(baseObj, CAMERAOBJECT_FAR_CLIPPING)
                          : DEFAULT_FAR_PLANE;
 
-  scene.cameras.push_back(camera);
+  g_scene.cameras.push_back(camera);
   return true;
 }
 
@@ -670,7 +684,7 @@ void ExportSpline(BaseObject* obj)
     s->points.push_back(points[i].z);
   }
 
-  scene.splines.push_back(s);
+  g_scene.splines.push_back(s);
 }
 
 //-----------------------------------------------------------------------------
@@ -685,7 +699,7 @@ bool AlienNullObjectData::Execute()
   CopyMatrix(baseObj->GetMl(), nullObject->mtxLocal);
   CopyMatrix(baseObj->GetMg(), nullObject->mtxGlobal);
 
-  scene.nullObjects.push_back(nullObject);
+  g_scene.nullObjects.push_back(nullObject);
 
   // Export spline objects that are children to the null object
   vector<BaseObject*> children;
@@ -728,7 +742,7 @@ bool AlienLightObjectData::Execute()
   light->color = GetVectorParam<boba::Color>(baseObj, LIGHT_COLOR);
   light->intensity = GetFloatParam(baseObj, LIGHT_BRIGHTNESS);
 
-  scene.lights.push_back(light);
+  g_scene.lights.push_back(light);
 
   return true;
 }
@@ -863,8 +877,9 @@ boba::BaseObject* boba::Scene::FindObject(melange::BaseObject* obj)
 //-----------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
-  if (int res = ParseOptions(argc, argv))
-    return res;
+  int optRes = ParseOptions(argc, argv);
+  if (optRes)
+    return optRes;
 
   time_t startTime = time(0);
   struct tm* now = localtime(&startTime);
@@ -894,11 +909,21 @@ int main(int argc, char** argv)
 
   CollectMaterials(g_Doc);
   g_Doc->CreateSceneFromC4D();
+  bool res = true;
+  for (auto& fn : g_deferredFunctions)
+  {
+    res &= fn();
+    if (!res)
+      break;
+  }
 
   int fps = g_Doc->GetFps();
 
   boba::SceneStats stats;
-  SaveScene(scene, options, &stats);
+  if (res)
+  {
+    SaveScene(g_scene, options, &stats);
+  }
 
   DeleteObj(g_Doc);
   DeleteObj(g_File);

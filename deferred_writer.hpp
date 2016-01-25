@@ -1,8 +1,4 @@
 #pragma once
-#include <stdint.h>
-#include <vector>
-#include <deque>
-#include <unordered_map>
 
 typedef uint32_t u32;
 typedef uint8_t u8;

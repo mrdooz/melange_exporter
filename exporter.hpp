@@ -1,21 +1,5 @@
 #pragma once
 
-#include <c4d_file.h>
-#include <c4d_ccurve.h>
-#include <c4d_ctrack.h>
-#include <stdint.h>
-#include <string>
-#include <vector>
-#include <unordered_map>
-
-typedef uint8_t u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-
-typedef int8_t s8;
-typedef int16_t s16;
-typedef int32_t s32;
-
 using namespace std;
 
 namespace boba
@@ -119,6 +103,7 @@ namespace boba
   {
     Camera(melange::BaseObject* melangeObj) : BaseObject(melangeObj) {}
 
+    BaseObject* targetObj = nullptr;
     float verticalFov;
     float nearPlane, farPlane;
   };
