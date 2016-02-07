@@ -161,7 +161,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\boba_scene.cpp" />
+    <ClCompile Include="..\save_scene.cpp" />
     <ClCompile Include="..\compress\forsythtriangleorderoptimizer.cpp" />
     <ClCompile Include="..\compress\indexbuffercompression.cpp" />
     <ClCompile Include="..\compress\indexbufferdecompression.cpp" />
@@ -189,6 +189,7 @@
     <ClInclude Include="..\exporter.hpp" />
     <ClInclude Include="..\exporter_helpers.hpp" />
     <ClInclude Include="..\precompiled.hpp" />
+    <ClInclude Include="..\save_scene.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

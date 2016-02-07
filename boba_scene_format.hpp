@@ -1,5 +1,9 @@
 #pragma once
 
+#ifndef BOBA_PROTOCOL_VERSION
+#define BOBA_PROTOCOL_VERSION 4
+#endif
+
 // This is the actual binary format saved on disk
 namespace protocol
 {
@@ -8,6 +12,19 @@ namespace protocol
   enum
   {
     INVALID_OBJECT_ID = 0xffffffff
+  };
+
+  enum class LightType : u32
+  {
+    Point,
+    Directional,
+    Spot,
+  };
+
+  enum class FalloffType : u32
+  {
+    None = 0,
+    Linear,
   };
 
   struct SceneBlob
@@ -26,9 +43,17 @@ namespace protocol
     u32 numLights;
     u32 numCameras;
     u32 numMaterials;
-    // new in version 2
+#if BOBA_PROTOCOL_VERSION >= 2
     u32 splineDataStart;
     u32 numSplines;
+#endif
+  };
+
+  struct Transform
+  {
+    float pos[3];
+    float rot[3];
+    float scale[3];
   };
 
   struct BlobBase
@@ -36,8 +61,14 @@ namespace protocol
     const char* name;
     u32 id;
     u32 parentId;
+#if BOBA_PROTOCOL_VERSION < 4
     float mtxLocal[12];
     float mtxGlobal[12];
+#endif
+#if BOBA_PROTOCOL_VERSION >= 4
+    Transform xformLocal;
+    Transform xformGlobal;
+#endif
   };
 
   struct MeshBlob : public BlobBase
@@ -74,15 +105,22 @@ namespace protocol
   {
     float verticalFov;
     float nearPlane, farPlane;
+#if BOBA_PROTOCOL_VERSION >= 3
     // new in version 3
     u32 targetId = INVALID_OBJECT_ID;
+#endif
   };
 
   struct LightBlob : public BlobBase
   {
-    int type;
-    float colorRgb[3];
+    LightType type;
+    float color[4];
     float intensity;
+
+    FalloffType falloffType;
+    float falloffRadius;
+
+    float outerAngle;
   };
 
   struct SplineBlob : public BlobBase

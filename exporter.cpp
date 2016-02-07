@@ -7,6 +7,7 @@
 #include "exporter_helpers.hpp"
 #include "boba_scene_format.hpp"
 #include "deferred_writer.hpp"
+#include "save_scene.hpp"
 
 //-----------------------------------------------------------------------------
 using namespace melange;
@@ -48,8 +49,6 @@ string MakeCanonical(const string& str)
 //-----------------------------------------------------------------------------
 
 u32 boba::Scene::nextObjectId = 1;
-extern bool SaveScene(
-    const boba::Scene& scene, const boba::Options& options, boba::SceneStats* stats);
 
 //-----------------------------------------------------------------------------
 boba::Scene g_scene;
@@ -73,6 +72,14 @@ string CopyString(const melange::String& str)
     DeleteMem(c);
   }
   return res;
+}
+
+//-----------------------------------------------------------------------------
+void CopyTransform(const Matrix& mtx, boba::Transform* xform)
+{
+  xform->pos = mtx.off;
+  xform->rot = MatrixToHPB(mtx, ROTATIONORDER_HPB);
+  xform->scale = Vector(Len(mtx.v1), Len(mtx.v2), Len(mtx.v3));
 }
 
 //-----------------------------------------------------------------------------
@@ -498,6 +505,7 @@ boba::BaseObject::BaseObject(melange::BaseObject* melangeObj)
     LOG(1,
         "  Unable to find parent! (%s)\n",
         melangeParent ? CopyString(melangeParent->GetName()).c_str() : "");
+    valid = false;
   }
 
   g_scene.objMap[melangeObj] = this;
@@ -580,9 +588,22 @@ Bool AlienPolygonObjectData::Execute()
   CollectMeshMaterials(polyObj, mesh);
   CollectVertices(polyObj, mesh);
 
+#if WITH_XFORM_MTX
   CopyMatrix(polyObj->GetMl(), mesh->mtxLocal);
   CopyMatrix(polyObj->GetMg(), mesh->mtxGlobal);
-  g_scene.meshes.push_back(mesh);
+#endif
+
+  CopyTransform(polyObj->GetMl(), &mesh->xformLocal);
+  CopyTransform(polyObj->GetMg(), &mesh->xformGlobal);
+
+  if (mesh->valid)
+  {
+    g_scene.meshes.push_back(mesh);
+  }
+  else
+  {
+    delete mesh;
+  }
 
   return true;
 }
@@ -634,8 +655,13 @@ Bool AlienCameraObjectData::Execute()
   }
 
   CollectionAnimationTracks(baseObj, &camera->animTracks);
+#if WITH_XFORM_MTX
   CopyMatrix(baseObj->GetMl(), camera->mtxLocal);
   CopyMatrix(baseObj->GetMg(), camera->mtxGlobal);
+#endif
+
+  CopyTransform(baseObj->GetMl(), &camera->xformLocal);
+  CopyTransform(baseObj->GetMg(), &camera->xformGlobal);
 
   camera->verticalFov = GetFloatParam(baseObj, CAMERAOBJECT_FOV_VERTICAL);
   camera->nearPlane =
@@ -646,7 +672,14 @@ Bool AlienCameraObjectData::Execute()
                          ? GetFloatParam(baseObj, CAMERAOBJECT_FAR_CLIPPING)
                          : DEFAULT_FAR_PLANE;
 
-  g_scene.cameras.push_back(camera);
+  if (camera->valid)
+  {
+    g_scene.cameras.push_back(camera);
+  }
+  else
+  {
+    delete camera;
+  }
   return true;
 }
 
@@ -696,8 +729,13 @@ bool AlienNullObjectData::Execute()
 
   boba::NullObject* nullObject = new boba::NullObject(baseObj);
   CollectionAnimationTracks(baseObj, &nullObject->animTracks);
+#if WITH_XFORM_MTX
   CopyMatrix(baseObj->GetMl(), nullObject->mtxLocal);
   CopyMatrix(baseObj->GetMg(), nullObject->mtxGlobal);
+#endif
+
+  CopyTransform(baseObj->GetMl(), &nullObject->xformLocal);
+  CopyTransform(baseObj->GetMg(), &nullObject->xformGlobal);
 
   g_scene.nullObjects.push_back(nullObject);
 
@@ -727,20 +765,50 @@ bool AlienLightObjectData::Execute()
   const string name = CopyString(baseObj->GetName());
 
   int lightType = GetInt32Param(baseObj, LIGHT_TYPE);
-  if (lightType != LIGHT_TYPE_OMNI)
+
+  if (lightType == LIGHT_TYPE_OMNI)
   {
-    LOG(1, "Only omni lights are supported: %s\n", name.c_str());
+  }
+  else if (lightType == LIGHT_TYPE_DISTANT)
+  {
+  }
+  else if (lightType == LIGHT_TYPE_SPOT)
+  {
+  }
+  else
+  {
+    LOG(1, "Unsupported light type: %s\n", name.c_str());
     return true;
   }
-
+  
   boba::Light* light = new boba::Light(baseObj);
   CollectionAnimationTracks(baseObj, &light->animTracks);
+#if WITH_XFORM_MTX
   CopyMatrix(baseObj->GetMl(), light->mtxLocal);
   CopyMatrix(baseObj->GetMg(), light->mtxGlobal);
+#endif
 
-  light->type = GetInt32Param(baseObj, LIGHT_TYPE);
+  CopyTransform(baseObj->GetMl(), &light->xformLocal);
+  CopyTransform(baseObj->GetMg(), &light->xformGlobal);
+
+  light->type = lightType;
   light->color = GetVectorParam<boba::Color>(baseObj, LIGHT_COLOR);
   light->intensity = GetFloatParam(baseObj, LIGHT_BRIGHTNESS);
+
+  light->falloffType = GetInt32Param(baseObj, LIGHT_DETAILS_FALLOFF);
+  // LIGHT_DETAILS_FALLOFF_LINEAR = 8,
+  if (light->falloffType == LIGHT_DETAILS_FALLOFF_LINEAR)
+  {
+    light->falloffRadius = GetFloatParam(baseObj, LIGHT_DETAILS_OUTERDISTANCE);
+  }
+
+  if (lightType == LIGHT_TYPE_DISTANT)
+  {
+  }
+  else if (lightType == LIGHT_TYPE_SPOT)
+  {
+    light->outerAngle = GetFloatParam(baseObj, LIGHT_DETAILS_OUTERANGLE);
+  }
 
   g_scene.lights.push_back(light);
 
@@ -875,6 +943,40 @@ boba::BaseObject* boba::Scene::FindObject(melange::BaseObject* obj)
 }
 
 //-----------------------------------------------------------------------------
+void ExportAnimations()
+{
+  GeData mydata;
+  float startTime = 0.0, endTime = 0.0;
+  int startFrame = 0, endFrame = 0, fps = 0;
+
+  // get fps 
+  if (g_Doc->GetParameter(DOCUMENT_FPS, mydata))
+    fps = mydata.GetInt32();
+
+  // get start and end time 
+  if (g_Doc->GetParameter(DOCUMENT_MINTIME, mydata))
+    startTime = mydata.GetTime().Get();
+
+  if (g_Doc->GetParameter(DOCUMENT_MAXTIME, mydata))
+    endTime = mydata.GetTime().Get();
+
+  // calculate start and end frame 
+  startFrame = startTime * fps;
+  endFrame = endTime * fps;
+
+  float inc = 1.0f / fps;
+  float curTime = startTime;
+  
+  while (curTime <= endTime)
+  {
+    g_Doc->SetTime(BaseTime(curTime));
+    g_Doc->Execute();
+
+    curTime += inc;
+  }
+}
+
+//-----------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
   int optRes = ParseOptions(argc, argv);
@@ -909,6 +1011,7 @@ int main(int argc, char** argv)
 
   CollectMaterials(g_Doc);
   g_Doc->CreateSceneFromC4D();
+
   bool res = true;
   for (auto& fn : g_deferredFunctions)
   {
@@ -917,7 +1020,7 @@ int main(int argc, char** argv)
       break;
   }
 
-  int fps = g_Doc->GetFps();
+  ExportAnimations();
 
   boba::SceneStats stats;
   if (res)
@@ -928,10 +1031,7 @@ int main(int argc, char** argv)
   DeleteObj(g_Doc);
   DeleteObj(g_File);
 
-  time_t endTime = time(0);
-  now = localtime(&endTime);
-
-  LOG(1,
+  LOG(2,
       "--> stats: \n"
       "    null object size: %.2f kb\n"
       "    camera object size: %.2f kb\n"
@@ -949,6 +1049,9 @@ int main(int argc, char** argv)
       (float)stats.splineSize / 1024,
       (float)stats.animationSize / 1024,
       (float)stats.dataSize / 1024);
+
+  time_t endTime = time(0);
+  now = localtime(&endTime);
 
   LOG(1,
       "==] DONE [=====================================] %.4d:%.2d:%.2d-%.2d:%.2d:%.2d ]==\n",

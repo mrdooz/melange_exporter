@@ -2,6 +2,8 @@
 
 using namespace std;
 
+#define WITH_XFORM_MTX 0
+
 namespace boba
 {
   static u32 DEFAULT_MATERIAL = ~0u;
@@ -69,16 +71,29 @@ namespace boba
   };
 
   //------------------------------------------------------------------------------
+  struct Transform
+  {
+    Vec3f pos;
+    Vec3f rot;
+    Vec3f scale;
+  };
+
+  //------------------------------------------------------------------------------
   struct BaseObject
   {
     BaseObject(melange::BaseObject* melangeObj);
 
     melange::BaseObject* melangeObj = nullptr;
     BaseObject* parent = nullptr;
+#if WITH_XFORM_MTX
     float mtxLocal[12];
     float mtxGlobal[12];
+#endif
+    Transform xformLocal;
+    Transform xformGlobal;
     string name;
     u32 id = ~0u;
+    bool valid = true;
 
     vector<Track> animTracks;
   };
@@ -87,9 +102,14 @@ namespace boba
   struct Light : public BaseObject
   {
     Light(melange::BaseObject* melangeObj) : BaseObject(melangeObj) {}
+    int type;
     Color color;
     float intensity;
-    int type;
+
+    int falloffType;
+    float falloffRadius;
+
+    float outerAngle = 0.0f;
   };
 
   //------------------------------------------------------------------------------
