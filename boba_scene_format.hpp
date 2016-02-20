@@ -9,6 +9,29 @@ namespace protocol
 {
 #pragma pack(push, 1)
 
+#define BIT(n) (1 << (n))
+
+  // clang-format off
+  enum VertexFormat2 : u16
+  {
+    VFORMAT2_POS = 0x1,
+    VFORMAT2_POS_XY = 0x2,
+    VFORMAT2_NORMAL = 0x3,
+    VFORMAT2_TANGENT = 0x4,
+    VFORMAT2_BINORMAL = 0x5,
+    VFORMAT2_TEX2 = 0x6,
+    VFORMAT2_TEX3 = 0x7,
+    VFORMAT2_COLOR = 0x8,
+    VFORMAT2_COLOR_U32 = 0x9,
+  };
+
+  enum VertexFlags2 : u16
+  {
+    VFLAG2_NONE = 0,
+    VFLAG2_COMPRESSED = BIT(0),
+  };
+  // clang-format on
+
   enum
   {
     INVALID_OBJECT_ID = 0xffffffff
@@ -84,9 +107,11 @@ namespace protocol
     u32 numIndices;
     u32 numMaterialGroups;
     MaterialGroup* materialGroups;
-    float* verts;
-    float* normals;
-    float* uv;
+    u32* vertexFormat;
+    float* vertexData;
+    //float* verts;
+    //float* normals;
+    //float* uv;
     u32* indices;
 
     u32 numSelectedEdges;

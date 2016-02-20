@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <unordered_set>
 #include <functional>
+#include <iterator>
 
 #include <c4d_file.h>
 #include <c4d_ccurve.h>

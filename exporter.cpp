@@ -8,6 +8,7 @@
 #include "boba_scene_format.hpp"
 #include "deferred_writer.hpp"
 #include "save_scene.hpp"
+#include <memory>
 
 //-----------------------------------------------------------------------------
 using namespace melange;
@@ -55,7 +56,7 @@ boba::Scene g_scene;
 boba::Options options;
 
 #define LOG(lvl, fmt, ...)                                                                         \
-  if (options.verbosity >= lvl)                                                                    \
+  if (options.loglevel >= lvl)                                                                    \
     printf(fmt, __VA_ARGS__);                                                                      \
   if (options.logfile)                                                                             \
     fprintf(options.logfile, fmt, __VA_ARGS__);
@@ -838,91 +839,144 @@ string FilenameFromInput(const string& inputFilename, bool stripPath)
 }
 
 //-----------------------------------------------------------------------------
-int ParseOptions(int argc, char** argv)
+struct ArgParse
 {
-  // format is [--verbose N] input [output]
-
-  if (argc < 2)
+  void AddFlag(const char* shortName, const char* longName, bool* out)
   {
-    printf("No input file specified\n");
-    return 1;
+    handlers.push_back(new FlagHandler(shortName, longName, out));
   }
 
-  int curArg = 1;
-  int remaining = argc - 1;
-
-  const auto& step = [&curArg, &remaining](int steps)
+  void AddIntArgument(const char* shortName, const char* longName, int* out)
   {
-    curArg += steps;
-    remaining -= steps;
+    handlers.push_back(new IntHandler(shortName, longName, out));
+  }
+
+  void AddFloatArgument(const char* shortName, const char* longName, float* out)
+  {
+    handlers.push_back(new FloatHandler(shortName, longName, out));
+  }
+
+  void AddStringArgument(const char* shortName, const char* longName, string* out)
+  {
+    handlers.push_back(new StringHandler(shortName, longName, out));
+  }
+
+  bool Parse(int argc, char** argv)
+  {
+    // parse all keyword arguments
+    int idx = 0;
+    while (idx < argc)
+    {
+      string cmd = argv[idx];
+      // oh noes, O(n), tihi
+      BaseHandler* handler = nullptr;
+      for (int i = 0; i < (int)handlers.size(); ++i)
+      {
+        if (cmd == handlers[i]->longName || cmd == handlers[i]->shortName)
+        {
+          handler = handlers[i];
+          break;
+        }
+      }
+
+      if (!handler)
+      {
+        // end of keyword arguments, so copy the remainder into the positional list
+        for (int i = idx; i < argc; ++i)
+          positional.push_back(argv[i]);
+        return true;
+      }
+
+      if (argc - idx < handler->RequiredArgs())
+      {
+        error = string("Too few arguments left for: ") + argv[idx];
+        return false;
+      }
+
+      const char* arg = handler->RequiredArgs() ? argv[idx + 1] : nullptr;
+      if (!handler->Process(arg))
+      {
+        error = string("Error processing argument: ") + (arg ? arg : "");
+        return false;
+      }
+
+      idx += handler->RequiredArgs() + 1;
+    }
+
+    return true;
+  }
+
+  void PrintHelp()
+  {
+    printf("Valid arguments are:\n");
+  }
+
+  struct BaseHandler
+  {
+    BaseHandler(const char* shortName, const char* longName)
+        : shortName(shortName ? shortName : ""), longName(longName ? longName : "")
+    {
+    }
+    virtual int RequiredArgs() = 0;
+    virtual bool Process(const char* value) = 0;
+
+    string shortName;
+    string longName;
   };
 
-  while (remaining)
+  struct FlagHandler : public BaseHandler
   {
-    if (strcmp(argv[curArg], "--compress-vertices") == 0)
+    FlagHandler(const char* shortName, const char* longName, bool* out)
+        : BaseHandler(shortName, longName), out(out)
     {
-      step(1);
     }
-    else if (strcmp(argv[curArg], "--compress-indices") == 0)
+    virtual int RequiredArgs() override { return 0; }
+    virtual bool Process(const char* value) override
     {
-      step(1);
+      *out = true;
+      return true;
     }
-    else if (strcmp(argv[curArg], "--verbose") == 0)
-    {
-      // we need at least 1 more argument (for the level)
-      if (remaining < 2)
-      {
-        printf("Invalid args\n");
-        return 1;
-      }
-      options.verbosity = atoi(argv[curArg + 1]);
-      step(2);
-    }
-    else
-    {
-      // Unknown arg, so break, and use this as the filename
-      break;
-    }
-  }
+    bool* out;
+  };
 
-  if (remaining < 1)
+  struct IntHandler : public BaseHandler
   {
-    printf("Invalid args\n");
-    return 1;
-  }
-
-  options.inputFilename = MakeCanonical(argv[curArg]);
-  step(1);
-
-  // create output file
-  if (remaining == 1)
-  {
-    // check if the remaining argument is a file name, or just a directory
-    if (strstr(argv[curArg], "boba") != nullptr)
+    IntHandler(const char* shortName, const char* longName, int* out) : BaseHandler(shortName, longName), out(out) {}
+    virtual int RequiredArgs() override { return 1; }
+    virtual bool Process(const char* value) override
     {
-      options.outputFilename = argv[curArg];
+      return sscanf(value, "%d", out) == 1;
     }
-    else
-    {
-      // a directory was given, so create the filename from the input file
-      string res = FilenameFromInput(options.inputFilename, true);
-      if (res.empty())
-        return 1;
+    int* out;
+  };
 
-      options.outputFilename = string(argv[curArg]) + '/' + res;
-    }
-  }
-  else
+  struct FloatHandler : public BaseHandler
   {
-    options.outputFilename = FilenameFromInput(options.inputFilename, false);
-    if (options.outputFilename.empty())
-      return 1;
-  }
+    FloatHandler(const char* shortName, const char* longName, float* out) : BaseHandler(shortName, longName), out(out) {}
+    virtual int RequiredArgs() override { return 1; }
+    virtual bool Process(const char* value) override
+    {
+      return sscanf(value, "%f", out) == 1;
+    }
+    float* out;
+  };
 
-  options.logfile = fopen((options.outputFilename + ".log").c_str(), "at");
+  struct StringHandler : public BaseHandler
+  {
+    StringHandler(const char* shortName, const char* longName, string* out) : BaseHandler(shortName, longName), out(out) {}
+    virtual int RequiredArgs() override { return 1; }
+    virtual bool Process(const char* value) override
+    {
+      *out = value;
+      return true;
+    }
+    string* out;
+  };
 
-  return 0;
-}
+  vector<string> positional;
+  string error;
+  vector<BaseHandler*> handlers;
+};
 
 u32 boba::Material::nextId;
 
@@ -976,12 +1030,75 @@ void ExportAnimations()
   }
 }
 
+bool ParseFilenames(const vector<string>& args)
+{
+  int curArg = 0;
+  int remaining = (int)args.size();
+
+  const auto& step = [&curArg, &remaining](int steps)
+  {
+    curArg += steps;
+    remaining -= steps;
+  };
+
+  if (remaining < 1)
+  {
+    printf("Invalid args\n");
+    return 1;
+  }
+
+  options.inputFilename = MakeCanonical(args[0]);
+  step(1);
+
+  // create output file
+  if (remaining == 1)
+  {
+    // check if the remaining argument is a file name, or just a directory
+    if (strstr(args[curArg].c_str(), "boba") != nullptr)
+    {
+      options.outputFilename = args[curArg];
+    }
+    else
+    {
+      // a directory was given, so create the filename from the input file
+      string res = FilenameFromInput(options.inputFilename, true);
+      if (res.empty())
+        return 1;
+
+      options.outputFilename = string(args[curArg]) + '/' + res;
+    }
+  }
+  else
+  {
+    options.outputFilename = FilenameFromInput(options.inputFilename, false);
+    if (options.outputFilename.empty())
+      return 1;
+  }
+
+  options.logfile = fopen((options.outputFilename + ".log").c_str(), "at");
+  return true;
+}
+
 //-----------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
-  int optRes = ParseOptions(argc, argv);
-  if (optRes)
-    return optRes;
+  ArgParse parser;
+  parser.AddFlag(nullptr, "compress-vertices", &options.compressVertices);
+  parser.AddFlag(nullptr, "compress-indices", &options.compressIndices);
+  parser.AddFlag(nullptr, "optimize-indices", &options.optimizeIndices);
+  parser.AddIntArgument(nullptr, "loglevel", &options.loglevel);
+
+  if (!parser.Parse(argc - 1, argv + 1))
+  {
+    fprintf(stderr, "%s", parser.error.c_str());
+    return 1;
+  }
+
+  if (!ParseFilenames(parser.positional))
+  {
+    fprintf(stderr, "Error parsing filenames");
+    return 1;
+  }
 
   time_t startTime = time(0);
   struct tm* now = localtime(&startTime);

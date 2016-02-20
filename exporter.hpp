@@ -13,9 +13,10 @@ namespace boba
     string inputFilename;
     string outputFilename;
     FILE* logfile = nullptr;
+    bool optimizeIndices = false;
     bool compressVertices = false;
     bool compressIndices = false;
-    int verbosity = 1;
+    int loglevel = 1;
   };
 
   class DeferredWriter;

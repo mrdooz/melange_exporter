@@ -179,29 +179,74 @@ namespace boba
 #endif
   }
 
-  //------------------------------------------------------------------------------
-  void SaveMesh(Mesh* mesh, const Options& options, DeferredWriter& writer)
+  struct Nibbler
   {
-    bool useCompression = false;
-    bool optimizeFaces = false;
-
-    // Compression stats:
-    // org: 2,030,104 crystals_flat.boba
-    // compressed indices: 1,712,177 crystals_flat.boba
-    // compressed indices + compressed normals: 1,213,649 crystals_flat.boba
-    SaveBase(mesh, options, writer);
-
-    // Note, divide by 3 here to write # verts, and not # floats
-    writer.Write((u32)mesh->verts.size() / 3);
-    writer.Write((u32)mesh->indices.size());
-
-    // write the material groups
-    writer.Write((u32)mesh->materialGroups.size());
-    writer.AddDeferredVector(mesh->materialGroups);
-    writer.AddDeferredVector(mesh->verts);
-
-    if (useCompression)
+    Nibbler()
     {
+      bytes.push_back(0);
+    }
+
+    void AddNibble(u8 nibble)
+    {
+      if (phase)
+      {
+        bytes.back() |= (nibble << 4);
+        bytes.push_back(0);
+      }
+      else
+      {
+        bytes.back() |= nibble;
+      }
+
+      phase ^= 1;
+    }
+
+    bool HasNibble(u8 nibble)
+    {
+      for (u8 b : bytes)
+      {
+        if ((b & 0xf) == nibble || ((b >> 4) & 0xf) == nibble)
+          return true;
+      }
+
+      return false;
+    }
+
+    int phase = 0;
+    vector<u8> bytes;
+  };
+
+  struct VertexFormat
+  {
+    void Add(protocol::VertexFormat2 fmt, protocol::VertexFlags2 flags)
+    {
+      bytes.push_back(((u32)flags << 16) + (u32)fmt);
+    }
+
+    void End()
+    {
+      bytes.push_back(0);
+    }
+
+    bool HasFormat(protocol::VertexFormat2 fmt)
+    {
+      for (u32 b : bytes)
+      {
+        if ((b & 0xffff) == fmt)
+          return true;
+      }
+
+      return false;
+    }
+
+    vector<u32> bytes;
+  };
+
+  //------------------------------------------------------------------------------
+  void SaveCompressedVertices(Mesh* mesh, const Options& options, DeferredWriter& writer)
+  {
+    {
+      // normals
       size_t numNormals = mesh->normals.size() / 3;
       vector<s16> compressedNormals(numNormals * 2);
 
@@ -226,51 +271,23 @@ namespace boba
 
       writer.AddDeferredVector(compressedNormals);
     }
-    else
-    {
-      writer.AddDeferredVector(mesh->normals);
-    }
 
-    // Don't save UVs if using the default material
-    if (mesh->materialGroups.size() == 1
-      && mesh->materialGroups[0].materialId == boba::DEFAULT_MATERIAL)
     {
-      writer.AddDeferredVector(vector<float>());
-    }
-    else
-    {
-      if (useCompression)
+      // texture coords
+      size_t numUvs = mesh->uv.size();
+      vector<s16> compressedUV(numUvs);
+      for (size_t i = 0; i < numUvs / 2; ++i)
       {
-        size_t numUvs = mesh->uv.size();
-        vector<s16> compressedUV(numUvs);
-        for (size_t i = 0; i < numUvs / 2; ++i)
-        {
-          Snorm<snormSize> u(mesh->uv[i * 2 + 0]);
-          Snorm<snormSize> v(mesh->uv[i * 2 + 1]);
-          compressedUV[i * 2 + 0] = u.bits() & 0xffff;
-          compressedUV[i * 2 + 1] = v.bits() & 0xffff;
-        }
-        writer.AddDeferredVector(compressedUV);
+        Snorm<snormSize> u(mesh->uv[i * 2 + 0]);
+        Snorm<snormSize> v(mesh->uv[i * 2 + 1]);
+        compressedUV[i * 2 + 0] = u.bits() & 0xffff;
+        compressedUV[i * 2 + 1] = v.bits() & 0xffff;
       }
-      else
-      {
-        writer.AddDeferredVector(mesh->uv);
-      }
+      writer.AddDeferredVector(compressedUV);
     }
 
-    if (optimizeFaces)
     {
-      vector<int> optimizedIndices(mesh->indices.size());
-      Forsyth::OptimizeFaces((const u32*)mesh->indices.data(),
-        (u32)mesh->indices.size(),
-        (u32)mesh->verts.size() / 3,
-        (u32*)optimizedIndices.data(),
-        32);
-      mesh->indices.swap(optimizedIndices);
-    }
-
-    if (useCompression)
-    {
+      // indices
       WriteBitstream output;
       vector<u32> vertexRemap(mesh->verts.size() / 3);
       CompressIndexBuffer((const u32*)mesh->indices.data(),
@@ -283,8 +300,79 @@ namespace boba
       vector<u8> compressedIndices(output.ByteSize());
       writer.AddDeferredVector(compressedIndices);
     }
+  }
+
+  //------------------------------------------------------------------------------
+  void OptimizeFaces(Mesh* mesh)
+  {
+    vector<int> optimizedIndices(mesh->indices.size());
+    Forsyth::OptimizeFaces((const u32*)mesh->indices.data(),
+        (u32)mesh->indices.size(),
+        (u32)mesh->verts.size() / 3,
+        (u32*)optimizedIndices.data(),
+        32);
+    mesh->indices.swap(optimizedIndices);
+  }
+
+  //------------------------------------------------------------------------------
+  void SaveMesh(Mesh* mesh, const Options& options, DeferredWriter& writer)
+  {
+    bool useCompression = false;
+    bool optimizeFaces = false;
+
+    // Compression stats:
+    // org: 2,030,104 crystals_flat.boba
+    // compressed indices: 1,712,177 crystals_flat.boba
+    // compressed indices + compressed normals: 1,213,649 crystals_flat.boba
+    SaveBase(mesh, options, writer);
+
+    // Note, divide by 3 here to write # verts, and not # floats
+    writer.Write((u32)mesh->verts.size() / 3);
+    writer.Write((u32)mesh->indices.size());
+
+    // write the material groups
+    writer.Write((u32)mesh->materialGroups.size());
+    writer.AddDeferredVector(mesh->materialGroups);
+
+    vector<float> vertexData;
+    VertexFormat fmt;
+    if (mesh->verts.size())
+    {
+      fmt.Add(protocol::VFORMAT2_POS, protocol::VFLAG2_NONE);
+      copy(mesh->verts.begin(), mesh->verts.end(), back_inserter(vertexData));
+    }
+
+    if (mesh->normals.size())
+    {
+      fmt.Add(protocol::VFORMAT2_NORMAL, protocol::VFLAG2_NONE);
+      copy(mesh->normals.begin(), mesh->normals.end(), back_inserter(vertexData));
+    }
+
+    // Don't save UVs if using the default material
+    if (mesh->uv.size() && mesh->materialGroups.size() == 1
+        && mesh->materialGroups[0].materialId == boba::DEFAULT_MATERIAL)
+    {
+      fmt.Add(protocol::VFORMAT2_TEX2, protocol::VFLAG2_NONE);
+      copy(mesh->uv.begin(), mesh->uv.end(), back_inserter(vertexData));
+    }
+
+    fmt.End();
+
+    writer.AddDeferredVector(fmt.bytes);
+
+    if (useCompression)
+    {
+      SaveCompressedVertices(mesh, options, writer);
+    }
     else
     {
+      writer.AddDeferredVector(vertexData);
+
+      if (optimizeFaces)
+      {
+        OptimizeFaces(mesh);
+      }
+
       writer.AddDeferredVector(mesh->indices);
     }
 
