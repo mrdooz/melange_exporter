@@ -17,9 +17,8 @@ namespace boba
     // together the caller and the data
     struct DeferredData
     {
-      DeferredData(u32 ref, const void *d, u32 len, bool saveBlobSize)
+      DeferredData(u32 ref, const void *d, u32 len)
       : ref(ref)
-      , saveBlobSize(saveBlobSize)
       {
         data.resize(len);
         memcpy(&data[0], d, len);
@@ -28,9 +27,11 @@ namespace boba
       vector<u8> data;
       // The position in the file that references the deferred block
       u32 ref;
-      bool saveBlobSize;
     };
 
+    // Local fixups allow you to create deferred data "in-place". Say you have a "Thing* ptr" in your
+    // structure, then you start by calling CreateFixup to indicate that you're going to write deferred data
+    // manually, then later you call InsertFixup to start writing that data.
     struct LocalFixup
     {
       LocalFixup(u32 ref, u32 dst)
@@ -48,7 +49,7 @@ namespace boba
     void WritePtr(intptr_t ptr);
     void WriteDeferredStart();
     u32 AddDeferredString(const string& str);
-    u32 AddDeferredData(const void *data, u32 len, bool writeDataSize);
+    u32 AddDeferredData(const void *data, u32 len);
     u32 CreateFixup();
     void InsertFixup(u32 id);
 
@@ -58,7 +59,7 @@ namespace boba
       if (!v.empty())
       {
         u32 len = (u32)v.size() * sizeof(T);
-        _deferredData.push_back(DeferredData(GetFilePos(), v.data(), len, false));
+        _deferredData.push_back(DeferredData(GetFilePos(), v.data(), len));
       }
       WritePtr(0);
     }
@@ -88,6 +89,7 @@ namespace boba
     vector<DeferredData> _deferredData;
     deque<int> _filePosStack;
     // Where in the file should we write the location of the deferred data (this is not the location itself)
+    // NB: this is currently not used, but instead the location is stored in the SceneBlob header
     u32 _deferredStartPos;
     FILE *_f;
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef BOBA_PROTOCOL_VERSION
-#define BOBA_PROTOCOL_VERSION 4
+#define BOBA_PROTOCOL_VERSION 5
 #endif
 
 // This is the actual binary format saved on disk
@@ -55,6 +55,7 @@ namespace protocol
     char id[4];
     u32 version = 2;
     u32 flags;
+    // offset of the deferred data
     u32 fixupOffset;
     u32 nullObjectDataStart;
     u32 meshDataStart;
@@ -96,6 +97,15 @@ namespace protocol
 
   struct MeshBlob : public BlobBase
   {
+    struct DataStream
+    {
+      const char* name;
+      u32 flags;
+      u32 numElems;
+      u32 elemSize;
+      void* data;
+    };
+
     struct MaterialGroup
     {
       u32 materialId;
@@ -107,15 +117,18 @@ namespace protocol
     u32 numIndices;
     u32 numMaterialGroups;
     MaterialGroup* materialGroups;
+
+    u32 numStreams;
+    DataStream* streams;
+
+#if BOBA_PROTOCOL_VERSION < 5
     u32* vertexFormat;
     float* vertexData;
-    //float* verts;
-    //float* normals;
-    //float* uv;
     u32* indices;
 
     u32 numSelectedEdges;
     u32* selectedEdges;
+#endif
 
     // bounding sphere
     float sx, sy, sz, r;

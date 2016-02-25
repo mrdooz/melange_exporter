@@ -54,14 +54,14 @@ void DeferredWriter::WriteDeferredStart()
 //------------------------------------------------------------------------------
 u32 DeferredWriter::AddDeferredString(const std::string &str)
 {
-  return AddDeferredData(str.data(), (u32)str.size() + 1, false);
+  return AddDeferredData(str.data(), (u32)str.size() + 1);
 }
 
 //------------------------------------------------------------------------------
-u32 DeferredWriter::AddDeferredData(const void *data, u32 len, bool writeDataSize)
+u32 DeferredWriter::AddDeferredData(const void *data, u32 len)
 {
   u32 tmp = DeferredDataSize();
-  _deferredData.push_back(DeferredData(GetFilePos(), data, len, writeDataSize));
+  _deferredData.push_back(DeferredData(GetFilePos(), data, len));
   // dummy write, will be filled in later with the position of the actual deferred data
   WritePtr(0);
   return tmp;
@@ -95,8 +95,6 @@ void DeferredWriter::WriteDeferredData()
   {
     int dataPos = GetFilePos();
     int len = (int)deferred.data.size();
-    if (deferred.saveBlobSize)
-      Write(len);
     WriteRaw(&deferred.data[0], len);
 
     // Jump back to the position that references this blob, and update
