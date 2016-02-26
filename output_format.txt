@@ -1,19 +1,5 @@
 namespace protocol
 {
-/*
-    flags VertexFormat
-    {
-        Pos,
-        PosXY
-        Normal,
-        Tangent,    
-        Binormal,
-        Tex2,
-        Tex3,
-        Color,
-        ColorU32
-    };
-*/
     // hello!
     struct Transform
     {
@@ -39,6 +25,32 @@ namespace protocol
             int flags;
             bytes data;
         };
+
+        struct MaterialGroup
+        {
+            int material_id;
+            int start_index;
+            int num_indices;
+        };
+
+        int num_verts;
+        int num_indices;
+        MaterialGroup material_groups[];
+        DataStreams data_streams[];
+
+        // bounding sphere
+        float sx, sy, sz, r;
     };
 
+    struct NullObject : Base
+    {
+
+    };
+
+    struct Camera : Base
+    {
+        float vertical_fov;
+        float near_plane, far_plane;
+        int? target_id;
+    };
 };
