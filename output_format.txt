@@ -1,21 +1,21 @@
 namespace protocol
 {
     // hello!
-    struct Transform
-    {
-        float pos[3];
-        float rot[3];
-        float scale[3];
-    };
+    // struct Transform
+    // {
+    //     float pos[3];
+    //     float rot[3];
+    //     float scale[3];
+    // };
 
-    struct Base
-    {
-        string name;
-        int id;
-        int parent_id;
-        Transform xform_local;
-        Transform xform_global;
-    };
+    // struct Base
+    // {
+    //     string name;
+    //     int id;
+    //     int parent_id;
+    //     Transform xform_local;
+    //     Transform xform_global;
+    // };
 
     struct Mesh : Base
     {
@@ -42,15 +42,15 @@ namespace protocol
         float sx, sy, sz, r;
     };
 
-    struct NullObject : Base
-    {
+    // struct NullObject : Base
+    // {
 
-    };
+    // };
 
-    struct Camera : Base
-    {
-        float vertical_fov;
-        float near_plane, far_plane;
-        int? target_id;
-    };
+    // struct Camera : Base
+    // {
+    //     float vertical_fov;
+    //     float near_plane, far_plane;
+    //     int? target_id;
+    // };
 };

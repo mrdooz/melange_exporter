@@ -26,21 +26,33 @@ def snake_to_camel(str):
     return ''.join([x.title() if i > 0 else x for i, x in enumerate(s)])
 
 
-def valid_type(t):
-    return t in BASIC_TYPES or t in USER_TYPES
+def make_full_name(prefix, outer=None):
+    if not outer:
+        return prefix
+    return outer.full_name + '::' + prefix
+
+
+def valid_type(prefix, scope):
+    # first do a lookup using the scope, then try without
+    full_type = make_full_name(prefix, scope)
+    return (
+        prefix in BASIC_TYPES or
+        full_type in USER_TYPES or
+        prefix in USER_TYPES)
 
 
 class Struct(object):
     def __init__(self, name, parent=None, outer=None):
         self.name = name
-        self.full_name = (outer.full_name + '::' + name) if outer else name
+        self.full_name = make_full_name(name, outer)
         self.parent = parent
         self.vars = []
         self.children = []
 
     def __repr__(self):
         return '%s%s <%r>' % (
-            self.name, ' : ' + self.parent if self.parent else '', self.vars)
+            self.full_name,
+            ' : ' + self.parent if self.parent else '', self.vars)
 
 
 class Var(object):
@@ -170,7 +182,8 @@ class Parser(object):
             if token == 'struct':
                 child = self.parse_struct(outer=s)
                 s.children.append(child)
-            elif valid_type(token):
+                print child
+            elif valid_type(token, s):
                 optional = self.tokens.consume_if('?')
                 var_type = token
                 while True:
@@ -257,3 +270,5 @@ p.parse()
 print gen_format_hpp(p.structs)
 # print '\n'.join(str(x) for x in p.structs)
 
+
+print USER_TYPES
