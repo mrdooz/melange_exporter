@@ -1,0 +1,44 @@
+namespace protocol
+{
+/*
+    flags VertexFormat
+    {
+        Pos,
+        PosXY
+        Normal,
+        Tangent,    
+        Binormal,
+        Tex2,
+        Tex3,
+        Color,
+        ColorU32
+    };
+*/
+    // hello!
+    struct Transform
+    {
+        float pos[3];
+        float rot[3];
+        float scale[3];
+    };
+
+    struct Base
+    {
+        string name;
+        int id;
+        int parent_id;
+        Transform xform_local;
+        Transform xform_global;
+    };
+
+    struct Mesh : Base
+    {
+        struct DataStream
+        {
+            string name;
+            int flags;
+            bytes data;
+        };
+    };
+
+};
