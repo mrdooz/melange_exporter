@@ -2,8 +2,6 @@
 #include <assert.h>
 #include <string>
 
-using namespace boba;
-
 //------------------------------------------------------------------------------
 DeferredWriter::DeferredWriter()
   : _f(nullptr)
@@ -159,9 +157,10 @@ u32 DeferredWriter::DeferredDataSize() const
 //------------------------------------------------------------------------------
 u32 DeferredWriter::CreateFixup()
 {
-  // create a pending fixup at the given start pos
+  // create a pending fixup at FilePos
   u32 f = _nextFixup++;
   _pendingFixups[f] = GetFilePos();
+  WritePtr(0);
   return f;
 }
 
@@ -171,7 +170,7 @@ void DeferredWriter::InsertFixup(u32 id)
   auto it = _pendingFixups.find(id);
   assert(it != _pendingFixups.end());
 
-  // Create a fixup from the local from @CreateFixup to the current file pos
+  // marks the the data for id is going to be written at FilePos
   _localFixups.push_back({ it->second, (u32)GetFilePos() });
   _pendingFixups.erase(it);
 }

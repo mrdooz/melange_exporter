@@ -161,6 +161,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\output_format.serialize.cpp" />
     <ClCompile Include="..\save_scene.cpp" />
     <ClCompile Include="..\compress\forsythtriangleorderoptimizer.cpp" />
     <ClCompile Include="..\compress\indexbuffercompression.cpp" />
@@ -188,6 +189,9 @@
     <ClInclude Include="..\deferred_writer.hpp" />
     <ClInclude Include="..\exporter.hpp" />
     <ClInclude Include="..\exporter_helpers.hpp" />
+    <ClInclude Include="..\output_format.binary.hpp" />
+    <ClInclude Include="..\output_format.friendly.hpp" />
+    <ClInclude Include="..\output_format.serialize.hpp" />
     <ClInclude Include="..\precompiled.hpp" />
     <ClInclude Include="..\save_scene.hpp" />
   </ItemGroup>

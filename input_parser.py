@@ -8,37 +8,12 @@
 # - enums
 
 import sys
+import os
 import logging
 from collections import deque
-from input_parser_templates import STRUCT_TEMPLATE
-
-USER_TYPES = set()
-BASIC_TYPES = set(['int', 'float', 'string'])
-
-
-def snake_to_title(str):
-    s = str.split('_')
-    return ''.join([x.title() for x in s])
-
-
-def snake_to_camel(str):
-    s = str.split('_')
-    return ''.join([x.title() if i > 0 else x for i, x in enumerate(s)])
-
-
-def make_full_name(prefix, outer=None):
-    if not outer:
-        return prefix
-    return outer.full_name + '::' + prefix
-
-
-def valid_type(prefix, scope):
-    # first do a lookup using the scope, then try without
-    full_type = make_full_name(prefix, scope)
-    return (
-        prefix in BASIC_TYPES or
-        full_type in USER_TYPES or
-        prefix in USER_TYPES)
+import input_parser_common
+from input_parser_common import (
+    USER_TYPES, make_full_name, valid_type)
 
 
 class Struct(object):
@@ -54,6 +29,12 @@ class Struct(object):
             self.full_name,
             ' : ' + self.parent if self.parent else '', self.vars)
 
+    def is_fixed_size(self):
+        return (
+            all([v.is_fixed_size() for v in self.vars]) and
+            all([c.is_fixed_size() for c in self.children])
+        )
+
 
 class Var(object):
     def __init__(self, name, var_type, optional=False, count=None):
@@ -68,54 +49,8 @@ class Var(object):
             self.name, self.type, '(Optional)' if self.optional else '',
             '[' + str(self.count) + ']' if self.count is not None else '')
 
-
-def line_gen(f):
-    # yields (line_num, line) tuples, stripping out commented and empty lines
-    block_comment_depth = 0
-    line_num = 0
-
-    def log_err(str):
-        logging.warn('%s. Line: %s', str, line_num)
-
-    for r in open(f, 'rt').readlines():
-        line_num += 1
-
-        start_block_comment = r.find('/*')
-
-        if start_block_comment != -1:
-            r = r[:start_block_comment]
-            block_comment_depth += 1
-
-        end_block_comment = r.find('*/')
-        if end_block_comment != -1:
-            r = r[end_block_comment + 2:]
-            block_comment_depth -= 1
-
-        if block_comment_depth:
-            continue
-
-        single_line_comment = r.find('//')
-        if single_line_comment != -1:
-            r = r[:single_line_comment]
-
-        r = r.strip()
-        if not r:
-            continue
-
-        yield line_num, r
-
-
-def create_tokens():
-    # surround various characters with ' ', so we can use split to tokenize
-    to_surround = [';', '(', ')', '[', ']', '{', '}', ',', ':', '?']
-
-    tokens = deque()
-    for line_num, line in line_gen(sys.argv[1]):
-        for ch in to_surround:
-            line = line.replace(ch, ' %s ' % ch)
-        s = line.split()
-        tokens.extend(zip([line_num] * len(s), s))
-    return tokens
+    def is_fixed_size(self):
+        return self.count != -1
 
 
 class TokenIterator(object):
@@ -151,9 +86,57 @@ class TokenIterator(object):
 
 class Parser(object):
 
-    def __init__(self, tokens):
-        self.tokens = TokenIterator(tokens)
+    def __init__(self, filename):
+        self.tokens = TokenIterator(self.create_tokens(filename))
         self.structs = []
+
+    def line_gen(self, f):
+        # yields (line_num, line) tuples, stripping out commented and empty
+        # lines
+        block_comment_depth = 0
+        line_num = 0
+
+        def log_err(str):
+            logging.warn('%s. Line: %s', str, line_num)
+
+        for r in open(f, 'rt').readlines():
+            line_num += 1
+
+            start_block_comment = r.find('/*')
+
+            if start_block_comment != -1:
+                r = r[:start_block_comment]
+                block_comment_depth += 1
+
+            end_block_comment = r.find('*/')
+            if end_block_comment != -1:
+                r = r[end_block_comment + 2:]
+                block_comment_depth -= 1
+
+            if block_comment_depth:
+                continue
+
+            single_line_comment = r.find('//')
+            if single_line_comment != -1:
+                r = r[:single_line_comment]
+
+            r = r.strip()
+            if not r:
+                continue
+
+            yield line_num, r
+
+    def create_tokens(self, filename):
+        # surround various characters with ' ', so we can use split to tokenize
+        to_surround = [';', '(', ')', '[', ']', '{', '}', ',', ':', '?']
+
+        tokens = deque()
+        for line_num, line in self.line_gen(filename):
+            for ch in to_surround:
+                line = line.replace(ch, ' %s ' % ch)
+            s = line.split()
+            tokens.extend(zip([line_num] * len(s), s))
+        return tokens
 
     def err(self, str):
         raise Exception('%s, line: %s' % (str, self.tokens.cur_line))
@@ -182,7 +165,6 @@ class Parser(object):
             if token == 'struct':
                 child = self.parse_struct(outer=s)
                 s.children.append(child)
-                print child
             elif valid_type(token, s):
                 optional = self.tokens.consume_if('?')
                 var_type = token
@@ -212,63 +194,61 @@ class Parser(object):
                 return s
         return s
 
+    def parse_assignment(self):
+        self.expect('=')
+        res = self.tokens.next()
+        self.expect(';')
+        return res
+
     def parse(self):
         for token in self.tokens:
-            if token == 'namespace':
-                self.namespace = self.tokens.next()
-                self.expect('{')
-                self.parse()
-            elif token == 'struct':
+            if token == 'struct':
                 self.structs.append(self.parse_struct())
             elif token == '}':
                 self.expect(';')
                 return
+            elif token == 'binary_namespace':
+                p = self.parse_assignment()
+                input_parser_common.BINARY_NAMESPACE = p
+            elif token == 'friendly_namespace':
+                p = self.parse_assignment()
+                input_parser_common.FRIENDLY_NAMESPACE = p
 
 
-def gen_format_hpp(structs):
-    res = []
-    for s in structs:
-        vars = '\n'.join([format_var(v) for v in s.vars])
-        r = STRUCT_TEMPLATE.substitute({'name': s.name, 'vars': vars})
-        res.append(r)
-    return '\n'.join(res)
+def save_output(p, filename):
+    # doing local imports here just because our decorators rely
+    # on the namespaces being set, and that's done during parsing..
+    from input_parser_binary_hpp import gen_binary_hpp
+    from input_parser_friendly_hpp import (
+        gen_friendly_hpp, gen_serializer, gen_serializer_decl)
 
+    path, filename = os.path.split(filename)
+    filename_base, ext = os.path.splitext(filename)
 
-def format_var(var):
-    res = []
+    binary_hpp = os.path.join(path, filename_base + '.binary.hpp')
+    friendly_hpp = os.path.join(path, filename_base + '.friendly.hpp')
+    serialize_hpp = os.path.join(path, filename_base + '.serialize.hpp')
+    serialize_cpp = os.path.join(path, filename_base + '.serialize.cpp')
 
-    type_mapping = {
-        'string': 'const char*',
-        'bytes': 'const char*',
-    }
+    def format_file(filename, s):
+        with open(filename, 'wt') as f:
+            f.write(s)
 
-    user_type = var.type in USER_TYPES
-    mapped_type = type_mapping.get(var.type)
+        import subprocess
+        proc = subprocess.Popen(
+            ['clang-format', filename], stdout=subprocess.PIPE)
 
-    base_type = mapped_type or var.type
-    title_var = snake_to_title(var.name)
-    camel_var = snake_to_camel(var.name)
+        res = '\n'.join([x.rstrip() for x in proc.stdout.readlines()])
+        with open(filename, 'wt') as f:
+            f.write(res)
 
-    if var.count == -1:
-        # variable length type
-        res.append('int num%s;' % title_var)
-        res.append('%s* %s;' % (base_type, camel_var))
-    else:
-        # user types are saved as pointers, because we might not
-        # know their size
-        if user_type:
-            res.append('%s* %s;' % (base_type, camel_var))
-        else:
-            res.append('%s %s;' % (base_type, camel_var))
+    format_file(binary_hpp, gen_binary_hpp(p.structs))
+    format_file(friendly_hpp, gen_friendly_hpp(p.structs))
+    format_file(serialize_hpp, gen_serializer_decl(p.structs))
+    format_file(serialize_cpp, gen_serializer(p.structs, friendly_hpp))
 
-    return '\n'.join(res)
-
-tokens = create_tokens()
-p = Parser(tokens)
+filename = sys.argv[1]
+p = Parser(filename)
 p.parse()
 
-print gen_format_hpp(p.structs)
-# print '\n'.join(str(x) for x in p.structs)
-
-
-print USER_TYPES
+save_output(p, filename)

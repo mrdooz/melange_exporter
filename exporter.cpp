@@ -11,22 +11,19 @@
 #include <memory>
 
 //-----------------------------------------------------------------------------
-using namespace melange;
-using namespace std;
-
 namespace
 {
   const float DEFAULT_NEAR_PLANE = 1.f;
   const float DEFAULT_FAR_PLANE = 1000.f;
 
-  AlienBaseDocument* g_Doc;
-  HyperFile* g_File;
+  melange::AlienBaseDocument* g_Doc;
+  melange::HyperFile* g_File;
 
   // Fixup functions called after the scene has been read and processed.
   vector<function<bool()>> g_deferredFunctions;
 }
 
-void CollectionAnimationTracks(BaseList2D* bl, vector<boba::Track>* tracks);
+void CollectionAnimationTracks(melange::BaseList2D* bl, vector<Track>* tracks);
 
 //------------------------------------------------------------------------------
 static string ReplaceAll(const string& str, char toReplace, char replaceWith)
@@ -49,11 +46,11 @@ string MakeCanonical(const string& str)
 
 //-----------------------------------------------------------------------------
 
-u32 boba::Scene::nextObjectId = 1;
+u32 Scene::nextObjectId = 1;
 
 //-----------------------------------------------------------------------------
-boba::Scene g_scene;
-boba::Options options;
+Scene g_scene;
+Options options;
 
 #define LOG(lvl, fmt, ...)                                                                         \
   if (options.loglevel >= lvl)                                                                    \
@@ -70,21 +67,21 @@ string CopyString(const melange::String& str)
   if (char* c = str.GetCStringCopy())
   {
     res = string(c);
-    DeleteMem(c);
+    melange::_MemFree((void**) &(c));
   }
   return res;
 }
 
 //-----------------------------------------------------------------------------
-void CopyTransform(const Matrix& mtx, boba::Transform* xform)
+void CopyTransform(const melange::Matrix& mtx, Transform* xform)
 {
   xform->pos = mtx.off;
-  xform->rot = MatrixToHPB(mtx, ROTATIONORDER_HPB);
-  xform->scale = Vector(Len(mtx.v1), Len(mtx.v2), Len(mtx.v3));
+  xform->rot = melange::MatrixToHPB(mtx, melange::ROTATIONORDER_HPB);
+  xform->scale = melange::Vector(Len(mtx.v1), Len(mtx.v2), Len(mtx.v3));
 }
 
 //-----------------------------------------------------------------------------
-void CopyMatrix(const Matrix& mtx, float* out)
+void CopyMatrix(const melange::Matrix& mtx, float* out)
 {
   out[0] = (float)mtx.v1.x;
   out[1] = (float)mtx.v1.y;
@@ -104,9 +101,9 @@ void CopyMatrix(const Matrix& mtx, float* out)
 template <typename R, typename T>
 R GetVectorParam(T* obj, int paramId)
 {
-  GeData data;
+  melange::GeData data;
   obj->GetParameter(paramId, data);
-  Vector v = data.GetVector();
+  melange::Vector v = data.GetVector();
   return R(v.x, v.y, v.z);
 }
 
@@ -114,7 +111,7 @@ R GetVectorParam(T* obj, int paramId)
 template <typename T>
 float GetFloatParam(T* obj, int paramId)
 {
-  GeData data;
+  melange::GeData data;
   obj->GetParameter(paramId, data);
   return (float)data.GetFloat();
 }
@@ -123,7 +120,7 @@ float GetFloatParam(T* obj, int paramId)
 template <typename T>
 int GetInt32Param(T* obj, int paramId)
 {
-  GeData data;
+  melange::GeData data;
   obj->GetParameter(paramId, data);
   return (float)data.GetInt32();
 }
@@ -179,30 +176,30 @@ void Add3Vector3(vector<float>* out, const T& a, const T& b, const T& c)
 };
 
 //-----------------------------------------------------------------------------
-Vector CalcNormal(const Vector& a, const Vector& b, const Vector& c)
+melange::Vector CalcNormal(const melange::Vector& a, const melange::Vector& b, const melange::Vector& c)
 {
-  Vector e0 = (b - a);
+  melange::Vector e0 = (b - a);
   e0.Normalize();
 
-  Vector e1 = (c - a);
+  melange::Vector e1 = (c - a);
   e1.Normalize();
 
   return Cross(e0, e1);
 }
 
 //-----------------------------------------------------------------------------
-void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
+void CollectVertices(melange::PolygonObject* polyObj, Mesh* mesh)
 {
   // get point and polygon array pointer and counts
-  const Vector* verts = polyObj->GetPointR();
-  const CPolygon* polysOrg = polyObj->GetPolygonR();
+  const melange::Vector* verts = polyObj->GetPointR();
+  const melange::CPolygon* polysOrg = polyObj->GetPolygonR();
 
   int vertexCount = polyObj->GetPointCount();
   if (!vertexCount)
     return;
 
   // calc bounding sphere (get center and max radius)
-  Vector center(verts[0]);
+  melange::Vector center(verts[0]);
   for (int i = 1; i < vertexCount; ++i)
   {
     center += verts[i];
@@ -232,7 +229,7 @@ void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
   int idx = 0;
   for (const pair<u32, vector<int>>& kv : mesh->polysByMaterial)
   {
-    boba::Mesh::MaterialGroup mg;
+    Mesh::MaterialGroup mg;
     mg.materialId = kv.first;
     mg.startIndex = idx;
     numPolys += (int)kv.second.size();
@@ -262,10 +259,11 @@ void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
   bool hasPhongTag = !!polyObj->GetTag(Tphong);
   bool hasNormals = hasNormalsTag || hasPhongTag;
 
-  Vector32* phongNormals = hasPhongTag ? polyObj->CreatePhongNormals() : nullptr;
-  NormalTag* normals = hasNormalsTag ? (NormalTag*)polyObj->GetTag(Tnormal) : nullptr;
-  UVWTag* uvs = (UVWTag*)polyObj->GetTag(Tuvw);
-  ConstUVWHandle uvHandle = uvs ? uvs->GetDataAddressR() : nullptr;
+  melange::Vector32* phongNormals = hasPhongTag ? polyObj->CreatePhongNormals() : nullptr;
+  melange::NormalTag* normals =
+      hasNormalsTag ? (melange::NormalTag*)polyObj->GetTag(Tnormal) : nullptr;
+  melange::UVWTag* uvs = (melange::UVWTag*)polyObj->GetTag(Tuvw);
+  melange::ConstUVWHandle uvHandle = uvs ? uvs->GetDataAddressR() : nullptr;
 
   // add verts
   mesh->verts.reserve(numVerts * 3);
@@ -273,7 +271,7 @@ void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
   mesh->indices.reserve(numVerts * 3);
   mesh->uv.reserve(numVerts * 3);
 
-  ConstNormalHandle normalHandle = normals ? normals->GetDataAddressR() : nullptr;
+  melange::ConstNormalHandle normalHandle = normals ? normals->GetDataAddressR() : nullptr;
 
   u32 vertOfs = 0;
 
@@ -305,7 +303,7 @@ void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
     {
       if (hasNormalsTag)
       {
-        NormalStruct normal;
+        melange::NormalStruct normal;
         normals->Get(normalHandle, i, normal);
         Add3Vector3(&mesh->normals, normal.a, normal.b, normal.c);
 
@@ -330,7 +328,7 @@ void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
     else
     {
       // no normals, so generate polygon normals and use them for all verts
-      Vector normal = CalcNormal(verts[idx0], verts[idx1], verts[idx2]);
+      melange::Vector normal = CalcNormal(verts[idx0], verts[idx1], verts[idx2]);
       Add3Vector3(&mesh->normals, normal, normal, normal);
       if (isQuad)
       {
@@ -340,8 +338,8 @@ void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
 
     if (uvHandle)
     {
-      UVWStruct s;
-      UVWTag::Get(uvHandle, i, s);
+      melange::UVWStruct s;
+      melange::UVWTag::Get(uvHandle, i, s);
 
       Add3Vector2(&mesh->uv, s.a, s.b, s.c, true);
       if (isQuad)
@@ -353,23 +351,23 @@ void CollectVertices(PolygonObject* polyObj, boba::Mesh* mesh)
   }
 
   if (phongNormals)
-    DeleteMem(phongNormals);
+    melange::_MemFree((void**)&phongNormals);
 }
 
 //-----------------------------------------------------------------------------
-void CollectMaterials(AlienBaseDocument* c4dDoc)
+void CollectMaterials(melange::AlienBaseDocument* c4dDoc)
 {
   // add default material
-  g_scene.materials.push_back(new boba::Material());
-  boba::Material* exporterMaterial = g_scene.materials.back();
+  g_scene.materials.push_back(new ::Material());
+  ::Material* exporterMaterial = g_scene.materials.back();
   exporterMaterial->mat = nullptr;
   exporterMaterial->name = "<default>";
   exporterMaterial->id = ~0u;
-  exporterMaterial->flags = boba::Material::FLAG_COLOR;
+  exporterMaterial->flags = ::Material::FLAG_COLOR;
   exporterMaterial->color.brightness = 1.f;
-  exporterMaterial->color.color = boba::Color(0.5f, 0.5f, 0.5f);
+  exporterMaterial->color.color = Color(0.5f, 0.5f, 0.5f);
 
-  for (BaseMaterial* mat = c4dDoc->GetFirstMaterial(); mat; mat = mat->GetNext())
+  for (melange::BaseMaterial* mat = c4dDoc->GetFirstMaterial(); mat; mat = mat->GetNext())
   {
     // check if the material is a standard material
     if (mat->GetType() != Mmaterial)
@@ -377,31 +375,31 @@ void CollectMaterials(AlienBaseDocument* c4dDoc)
 
     string name = CopyString(mat->GetName());
 
-    g_scene.materials.push_back(new boba::Material());
-    boba::Material* exporterMaterial = g_scene.materials.back();
+    g_scene.materials.push_back(new ::Material());
+    ::Material* exporterMaterial = g_scene.materials.back();
     exporterMaterial->mat = mat;
     exporterMaterial->name = name;
 
     // check if the given channel is used in the material
     if (((melange::Material*)mat)->GetChannelState(CHANNEL_COLOR))
     {
-      exporterMaterial->flags |= boba::Material::FLAG_COLOR;
-      exporterMaterial->color.brightness = GetFloatParam(mat, MATERIAL_COLOR_BRIGHTNESS);
-      exporterMaterial->color.color = GetVectorParam<boba::Color>(mat, MATERIAL_COLOR_COLOR);
+      exporterMaterial->flags |= ::Material::FLAG_COLOR;
+      exporterMaterial->color.brightness = GetFloatParam(mat, melange::MATERIAL_COLOR_BRIGHTNESS);
+      exporterMaterial->color.color = GetVectorParam<Color>(mat, melange::MATERIAL_COLOR_COLOR);
     }
 
     if (((melange::Material*)mat)->GetChannelState(CHANNEL_REFLECTION))
     {
-      exporterMaterial->flags |= boba::Material::FLAG_REFLECTION;
-      exporterMaterial->reflection.brightness = GetFloatParam(mat, MATERIAL_REFLECTION_BRIGHTNESS);
+      exporterMaterial->flags |= Material::FLAG_REFLECTION;
+      exporterMaterial->reflection.brightness = GetFloatParam(mat, melange::MATERIAL_REFLECTION_BRIGHTNESS);
       exporterMaterial->reflection.color =
-          GetVectorParam<boba::Color>(mat, MATERIAL_REFLECTION_COLOR);
+          GetVectorParam<Color>(mat, melange::MATERIAL_REFLECTION_COLOR);
     }
   }
 }
 
 //-----------------------------------------------------------------------------
-void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
+void CollectMeshMaterials(melange::PolygonObject* obj, Mesh* mesh)
 {
   unordered_set<u32> selectedPolys;
 
@@ -410,26 +408,27 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
 
   // For each material found, check if the following tag is a selection tag, in which
   // case record which polys belong to it
-  for (BaseTag* btag = obj->GetFirstTag(); btag; btag = btag->GetNext())
+  for (melange::BaseTag* btag = obj->GetFirstTag(); btag; btag = btag->GetNext())
   {
     // texture tag
     if (btag->GetType() == Ttexture)
     {
-      GeData data;
-      AlienMaterial* mat =
-          btag->GetParameter(TEXTURETAG_MATERIAL, data) ? (AlienMaterial*)data.GetLink() : NULL;
+      melange::GeData data;
+      melange::AlienMaterial* mat = btag->GetParameter(melange::TEXTURETAG_MATERIAL, data)
+                                        ? (melange::AlienMaterial*)data.GetLink()
+                                        : NULL;
       if (!mat)
         continue;
 
       auto materialIt = find_if(RANGE(g_scene.materials),
-          [mat](const boba::Material* m)
+          [mat](const Material* m)
           {
             return m->mat == mat;
           });
       if (materialIt == g_scene.materials.end())
         continue;
 
-      boba::Material* bobaMaterial = *materialIt;
+      Material* bobaMaterial = *materialIt;
       prevMaterial = bobaMaterial->id;
       if (firstMaterial == ~0u)
         firstMaterial = bobaMaterial->id;
@@ -445,7 +444,7 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
         continue;
       }
 
-      if (BaseSelect* bs = ((SelectionTag*)btag)->GetBaseSelect())
+      if (melange::BaseSelect* bs = ((melange::SelectionTag*)btag)->GetBaseSelect())
       {
         auto& polysByMaterial = mesh->polysByMaterial[prevMaterial];
         for (int i = 0, e = obj->GetPolygonCount(); i < e; ++i)
@@ -466,7 +465,7 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
   // if no materials are found, just add them to a dummy material
   if (firstMaterial == ~0u)
   {
-    u32 dummyMaterial = boba::DEFAULT_MATERIAL;
+    u32 dummyMaterial = DEFAULT_MATERIAL;
     auto& polysByMaterial = mesh->polysByMaterial[dummyMaterial];
     for (int i = 0, e = obj->GetPolygonCount(); i < e; ++i)
     {
@@ -487,13 +486,13 @@ void CollectMeshMaterials(PolygonObject* obj, boba::Mesh* mesh)
   for (auto g : mesh->polysByMaterial)
   {
     const char* materialName =
-        g.first == boba::DEFAULT_MATERIAL ? "<default>" : g_scene.materials[g.first]->name.c_str();
+        g.first == DEFAULT_MATERIAL ? "<default>" : g_scene.materials[g.first]->name.c_str();
     LOG(2, "material: %s, %d polys\n", materialName, (int)g.second.size());
   }
 }
 
 //-----------------------------------------------------------------------------
-boba::BaseObject::BaseObject(melange::BaseObject* melangeObj)
+BaseObject::BaseObject(melange::BaseObject* melangeObj)
     : melangeObj(melangeObj)
     , parent(g_scene.FindObject(melangeObj->GetUp()))
     , name(CopyString(melangeObj->GetName()))
@@ -513,9 +512,9 @@ boba::BaseObject::BaseObject(melange::BaseObject* melangeObj)
 }
 
 //-----------------------------------------------------------------------------
-Bool AlienPrimitiveObjectData::Execute()
+bool melange::AlienPrimitiveObjectData::Execute()
 {
-  BaseObject* baseObj = (BaseObject*)GetNode();
+  melange::BaseObject* baseObj = (melange::BaseObject*)GetNode();
 
   string name(CopyString(baseObj->GetName()));
   LOG(1, "Skipping primitive object: %s\n", name.c_str());
@@ -523,49 +522,49 @@ Bool AlienPrimitiveObjectData::Execute()
 }
 
 //-----------------------------------------------------------------------------
-void CollectionAnimationTracks(BaseList2D* bl, vector<boba::Track>* tracks)
+void CollectionAnimationTracks(melange::BaseList2D* bl, vector<Track>* tracks)
 {
   if (!bl || !bl->GetFirstCTrack())
     return;
 
-  for (CTrack* ct = bl->GetFirstCTrack(); ct; ct = ct->GetNext())
+  for (melange::CTrack* ct = bl->GetFirstCTrack(); ct; ct = ct->GetNext())
   {
     // CTrack name
-    boba::Track track;
+    Track track;
     track.name = CopyString(ct->GetName());
 
     // time track
-    CTrack* tt = ct->GetTimeTrack(bl->GetDocument());
+    melange::CTrack* tt = ct->GetTimeTrack(bl->GetDocument());
     if (tt)
     {
       LOG(1, "Time track is unsupported");
     }
 
     // get DescLevel id
-    DescID testID = ct->GetDescriptionID();
-    DescLevel lv = testID[0];
+    melange::DescID testID = ct->GetDescriptionID();
+    melange::DescLevel lv = testID[0];
     ct->SetDescriptionID(ct, testID);
 
     // get CCurve and print key frame data
-    CCurve* cc = ct->GetCurve();
+    melange::CCurve* cc = ct->GetCurve();
     if (cc)
     {
-      boba::Curve curve;
+      Curve curve;
       curve.name = CopyString(cc->GetName());
 
-      for (Int32 k = 0; k < cc->GetKeyCount(); k++)
+      for (int k = 0; k < cc->GetKeyCount(); k++)
       {
-        CKey* ck = cc->GetKey(k);
-        BaseTime t = ck->GetTime();
-        if (ct->GetTrackCategory() == PSEUDO_VALUE)
+        melange::CKey* ck = cc->GetKey(k);
+        melange::BaseTime t = ck->GetTime();
+        if (ct->GetTrackCategory() == melange::PSEUDO_VALUE)
         {
-          curve.keyframes.push_back(boba::Keyframe{(int)t.GetFrame(g_Doc->GetFps()), ck->GetValue()});
+          curve.keyframes.push_back(Keyframe{(int)t.GetFrame(g_Doc->GetFps()), ck->GetValue()});
         }
-        else if (ct->GetTrackCategory() == PSEUDO_PLUGIN && ct->GetType() == CTpla)
+        else if (ct->GetTrackCategory() == melange::PSEUDO_PLUGIN && ct->GetType() == CTpla)
         {
           LOG(1, "Plugin keyframes are unsupported");
         }
-        else if (ct->GetTrackCategory() == PSEUDO_PLUGIN && ct->GetType() == CTmorph)
+        else if (ct->GetTrackCategory() == melange::PSEUDO_PLUGIN && ct->GetType() == CTmorph)
         {
           LOG(1, "Morph keyframes are unsupported");
         }
@@ -578,12 +577,12 @@ void CollectionAnimationTracks(BaseList2D* bl, vector<boba::Track>* tracks)
 }
 
 //-----------------------------------------------------------------------------
-Bool AlienPolygonObjectData::Execute()
+bool melange::AlienPolygonObjectData::Execute()
 {
   BaseObject* baseObj = (BaseObject*)GetNode();
   PolygonObject* polyObj = (PolygonObject*)baseObj;
 
-  boba::Mesh* mesh = new boba::Mesh(baseObj);
+  Mesh* mesh = new Mesh(baseObj);
   CollectionAnimationTracks(baseObj, &mesh->animTracks);
 
   CollectMeshMaterials(polyObj, mesh);
@@ -610,7 +609,7 @@ Bool AlienPolygonObjectData::Execute()
 }
 
 //-----------------------------------------------------------------------------
-Bool AlienCameraObjectData::Execute()
+bool melange::AlienCameraObjectData::Execute()
 {
   BaseObject* baseObj = (BaseObject*)GetNode();
   const string name = CopyString(baseObj->GetName());
@@ -639,7 +638,7 @@ Bool AlienCameraObjectData::Execute()
     return false;
   }
 
-  boba::Camera* camera = new boba::Camera(baseObj);
+  Camera* camera = new Camera(baseObj);
 
   if (targetTag)
   {
@@ -685,9 +684,9 @@ Bool AlienCameraObjectData::Execute()
 }
 
 //-----------------------------------------------------------------------------
-void GetChildren(BaseObject* obj, vector<BaseObject*>* children)
+void GetChildren(melange::BaseObject* obj, vector<melange::BaseObject*>* children)
 {
-  BaseObject* child = obj->GetDown();
+  melange::BaseObject* child = obj->GetDown();
   while (child)
   {
     children->push_back(child);
@@ -696,17 +695,17 @@ void GetChildren(BaseObject* obj, vector<BaseObject*>* children)
 }
 
 //-----------------------------------------------------------------------------
-void ExportSpline(BaseObject* obj)
+void ExportSpline(melange::BaseObject* obj)
 {
-  SplineObject* splineObject = static_cast<SplineObject*>(obj);
+  melange::SplineObject* splineObject = static_cast<melange::SplineObject*>(obj);
   string splineName = CopyString(splineObject->GetName());
 
-  SPLINETYPE splineType = splineObject->GetSplineType();
+  melange::SPLINETYPE splineType = splineObject->GetSplineType();
   bool isClosed = splineObject->GetIsClosed();
   int pointCount = splineObject->GetPointCount();
-  const Vector* points = splineObject->GetPointR();
+  const melange::Vector* points = splineObject->GetPointR();
 
-  boba::Spline* s = new boba::Spline(splineObject);
+  Spline* s = new Spline(splineObject);
   s->type = splineType;
   s->isClosed = isClosed;
 
@@ -722,13 +721,13 @@ void ExportSpline(BaseObject* obj)
 }
 
 //-----------------------------------------------------------------------------
-bool AlienNullObjectData::Execute()
+bool melange::AlienNullObjectData::Execute()
 {
-  BaseObject* baseObj = (BaseObject*)GetNode();
+  melange::BaseObject* baseObj = (melange::BaseObject*)GetNode();
 
   const string name = CopyString(baseObj->GetName());
 
-  boba::NullObject* nullObject = new boba::NullObject(baseObj);
+  NullObject* nullObject = new NullObject(baseObj);
   CollectionAnimationTracks(baseObj, &nullObject->animTracks);
 #if WITH_XFORM_MTX
   CopyMatrix(baseObj->GetMl(), nullObject->mtxLocal);
@@ -760,7 +759,7 @@ bool AlienNullObjectData::Execute()
 }
 
 //-----------------------------------------------------------------------------
-bool AlienLightObjectData::Execute()
+bool melange::AlienLightObjectData::Execute()
 {
   BaseObject* baseObj = (BaseObject*)GetNode();
   const string name = CopyString(baseObj->GetName());
@@ -782,7 +781,7 @@ bool AlienLightObjectData::Execute()
     return true;
   }
   
-  boba::Light* light = new boba::Light(baseObj);
+  Light* light = new Light(baseObj);
   CollectionAnimationTracks(baseObj, &light->animTracks);
 #if WITH_XFORM_MTX
   CopyMatrix(baseObj->GetMl(), light->mtxLocal);
@@ -793,7 +792,7 @@ bool AlienLightObjectData::Execute()
   CopyTransform(baseObj->GetMg(), &light->xformGlobal);
 
   light->type = lightType;
-  light->color = GetVectorParam<boba::Color>(baseObj, LIGHT_COLOR);
+  light->color = GetVectorParam<Color>(baseObj, LIGHT_COLOR);
   light->intensity = GetFloatParam(baseObj, LIGHT_BRIGHTNESS);
 
   light->falloffType = GetInt32Param(baseObj, LIGHT_DETAILS_FALLOFF);
@@ -978,7 +977,7 @@ struct ArgParse
   vector<BaseHandler*> handlers;
 };
 
-u32 boba::Material::nextId;
+u32 Material::nextId;
 
 //------------------------------------------------------------------------------
 #ifndef _WIN32
@@ -990,7 +989,7 @@ constexpr size_t offsetOf(U T::*member)
 #endif
 
 //------------------------------------------------------------------------------
-boba::BaseObject* boba::Scene::FindObject(melange::BaseObject* obj)
+BaseObject* Scene::FindObject(melange::BaseObject* obj)
 {
   auto it = objMap.find(obj);
   return it == objMap.end() ? nullptr : it->second;
@@ -999,19 +998,19 @@ boba::BaseObject* boba::Scene::FindObject(melange::BaseObject* obj)
 //-----------------------------------------------------------------------------
 void ExportAnimations()
 {
-  GeData mydata;
+  melange::GeData mydata;
   float startTime = 0.0, endTime = 0.0;
   int startFrame = 0, endFrame = 0, fps = 0;
 
   // get fps 
-  if (g_Doc->GetParameter(DOCUMENT_FPS, mydata))
+  if (g_Doc->GetParameter(melange::DOCUMENT_FPS, mydata))
     fps = mydata.GetInt32();
 
   // get start and end time 
-  if (g_Doc->GetParameter(DOCUMENT_MINTIME, mydata))
+  if (g_Doc->GetParameter(melange::DOCUMENT_MINTIME, mydata))
     startTime = mydata.GetTime().Get();
 
-  if (g_Doc->GetParameter(DOCUMENT_MAXTIME, mydata))
+  if (g_Doc->GetParameter(melange::DOCUMENT_MAXTIME, mydata))
     endTime = mydata.GetTime().Get();
 
   // calculate start and end frame 
@@ -1023,7 +1022,7 @@ void ExportAnimations()
   
   while (curTime <= endTime)
   {
-    g_Doc->SetTime(BaseTime(curTime));
+    g_Doc->SetTime(melange::BaseTime(curTime));
     g_Doc->Execute();
 
     curTime += inc;
@@ -1115,10 +1114,10 @@ int main(int argc, char** argv)
       options.inputFilename.c_str(),
       options.outputFilename.c_str());
 
-  g_Doc = NewObj(AlienBaseDocument);
-  g_File = NewObj(HyperFile);
+  g_Doc = NewObj(melange::AlienBaseDocument);
+  g_File = NewObj(melange::HyperFile);
 
-  if (!g_File->Open(DOC_IDENT, options.inputFilename.c_str(), FILEOPEN_READ))
+  if (!g_File->Open(DOC_IDENT, options.inputFilename.c_str(), melange::FILEOPEN_READ))
     return 1;
 
   if (!g_Doc->ReadObject(g_File, true))
@@ -1139,7 +1138,7 @@ int main(int argc, char** argv)
 
   ExportAnimations();
 
-  boba::SceneStats stats;
+  SceneStats stats;
   if (res)
   {
     SaveScene(g_scene, options, &stats);
