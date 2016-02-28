@@ -3,17 +3,18 @@
 # and serialization code
 
 # todo:
-# - settings (namespace etc)
-# - inner structs
 # - enums
 
 import sys
 import os
 import logging
 from collections import deque
+import argparse
 import input_parser_common
 from input_parser_common import (
     USER_TYPES, make_full_name, valid_type)
+
+OUTPUT_DIR = None
 
 
 class Struct(object):
@@ -223,12 +224,12 @@ def save_output(p, filename):
         gen_friendly_hpp, gen_serializer, gen_serializer_decl)
 
     path, filename = os.path.split(filename)
-    filename_base, ext = os.path.splitext(filename)
+    base, ext = os.path.splitext(filename)
 
-    binary_hpp = os.path.join(path, filename_base + '.binary.hpp')
-    friendly_hpp = os.path.join(path, filename_base + '.friendly.hpp')
-    serialize_hpp = os.path.join(path, filename_base + '.serialize.hpp')
-    serialize_cpp = os.path.join(path, filename_base + '.serialize.cpp')
+    binary_hpp = os.path.join(OUTPUT_DIR, path, base + '.binary.hpp')
+    friendly_hpp = os.path.join(OUTPUT_DIR, path, base + '.friendly.hpp')
+    serialize_hpp = os.path.join(OUTPUT_DIR, path, base + '.serialize.hpp')
+    serialize_cpp = os.path.join(OUTPUT_DIR, path, base + '.serialize.cpp')
 
     def format_file(filename, s):
         with open(filename, 'wt') as f:
@@ -247,7 +248,13 @@ def save_output(p, filename):
     format_file(serialize_hpp, gen_serializer_decl(p.structs))
     format_file(serialize_cpp, gen_serializer(p.structs, friendly_hpp))
 
-filename = sys.argv[1]
+parser = argparse.ArgumentParser()
+parser.add_argument('filename')
+parser.add_argument('-o', '--out-dir', default='generated')
+args = parser.parse_args()
+OUTPUT_DIR = args.out_dir
+
+filename = args.filename
 p = Parser(filename)
 p.parse()
 

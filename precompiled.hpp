@@ -28,3 +28,5 @@ typedef int16_t s16;
 typedef int32_t s32;
 
 using namespace std;
+
+#define RANGE(c) (c).begin(), (c).end()

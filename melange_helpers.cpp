@@ -1,6 +1,22 @@
-#include "exporter_helpers.hpp"
+#include "melange_helpers.hpp"
+#include "export_camera.hpp"
+#include "export_mesh.hpp"
+#include "export_light.hpp"
+#include "export_misc.hpp"
 
 using namespace melange;
+
+//-----------------------------------------------------------------------------
+string CopyString(const melange::String& str)
+{
+  string res;
+  if (char* c = str.GetCStringCopy())
+  {
+    res = string(c);
+    melange::_MemFree((void**)&(c));
+  }
+  return res;
+}
 
 // overload this function and fill in your own unique data
 void GetWriterInfo(Int32& id, String& appname)
@@ -48,17 +64,17 @@ NodeData* AllocAlienObjectData(Int32 id, Bool& known)
   switch (id)
   {
     // supported element types
-    case Opolygon: m_data = NewObj(AlienPolygonObjectData); break;
-    case Ocamera: m_data = NewObj(AlienCameraObjectData); break;
-    case Onull: m_data = NewObj(AlienNullObjectData); break;
-    case Olight: m_data = NewObj(AlienLightObjectData); break;
-    case Opoint: m_data = NewObj(AlienPointObjectData); break;
-    case Osphere: m_data = NewObj(AlienPrimitiveObjectData); break;
-    case Ocube: m_data = NewObj(AlienPrimitiveObjectData); break;
-    case Oplane: m_data = NewObj(AlienPrimitiveObjectData); break;
-    case Ocone: m_data = NewObj(AlienPrimitiveObjectData); break;
-    case Otorus: m_data = NewObj(AlienPrimitiveObjectData); break;
-    case Ocylinder: m_data = NewObj(AlienPrimitiveObjectData); break;
+  case Opolygon: m_data = NewObj(AlienPolygonObjectData); break;
+  case Ocamera: m_data = NewObj(AlienCameraObjectData); break;
+  case Onull: m_data = NewObj(AlienNullObjectData); break;
+  case Olight: m_data = NewObj(AlienLightObjectData); break;
+  case Opoint: m_data = NewObj(AlienPointObjectData); break;
+  case Osphere: m_data = NewObj(AlienPrimitiveObjectData); break;
+  case Ocube: m_data = NewObj(AlienPrimitiveObjectData); break;
+  case Oplane: m_data = NewObj(AlienPrimitiveObjectData); break;
+  case Ocone: m_data = NewObj(AlienPrimitiveObjectData); break;
+  case Otorus: m_data = NewObj(AlienPrimitiveObjectData); break;
+  case Ocylinder: m_data = NewObj(AlienPrimitiveObjectData); break;
   }
 
   known = !!m_data;
@@ -170,23 +186,23 @@ static void PrintAnimInfo(BaseList2D* bl)
     // CTrack type
     switch (ct->GetTrackCategory())
     {
-      case PSEUDO_VALUE: printf("   VALUE - Track found!\n"); break;
+    case PSEUDO_VALUE: printf("   VALUE - Track found!\n"); break;
 
-      case PSEUDO_DATA: printf("   DATA - Track found!\n"); break;
+    case PSEUDO_DATA: printf("   DATA - Track found!\n"); break;
 
-      case PSEUDO_PLUGIN:
-        if (ct->GetType() == CTpla)
-          printf("   PLA - Track found!\n");
-        else if (ct->GetType() == CTdynamicspline)
-          printf("   Dynamic Spline Data - Track found!\n");
-        else if (ct->GetType() == CTmorph)
-          printf("   MORPH - Track found!\n");
-        else
-          printf("   unknown PLUGIN - Track found!\n");
-        break;
+    case PSEUDO_PLUGIN:
+      if (ct->GetType() == CTpla)
+        printf("   PLA - Track found!\n");
+      else if (ct->GetType() == CTdynamicspline)
+        printf("   Dynamic Spline Data - Track found!\n");
+      else if (ct->GetType() == CTmorph)
+        printf("   MORPH - Track found!\n");
+      else
+        printf("   unknown PLUGIN - Track found!\n");
+      break;
 
-      case PSEUDO_UNDEF:
-      default: printf("   UNDEFINDED - Track found!\n");
+    case PSEUDO_UNDEF:
+    default: printf("   UNDEFINDED - Track found!\n");
     }
 
     // get CCurve and print key frame data
