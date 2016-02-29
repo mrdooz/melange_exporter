@@ -5,7 +5,6 @@
 # todo:
 # - enums
 
-import sys
 import os
 import logging
 from collections import deque
@@ -226,6 +225,9 @@ def save_output(p, filename):
     path, filename = os.path.split(filename)
     base, ext = os.path.splitext(filename)
 
+    if not os.path.exists(OUTPUT_DIR):
+        os.mkdir(OUTPUT_DIR)
+
     binary_hpp = os.path.join(OUTPUT_DIR, path, base + '.binary.hpp')
     friendly_hpp = os.path.join(OUTPUT_DIR, path, base + '.friendly.hpp')
     serialize_hpp = os.path.join(OUTPUT_DIR, path, base + '.serialize.hpp')
@@ -246,7 +248,13 @@ def save_output(p, filename):
     format_file(binary_hpp, gen_binary_hpp(p.structs))
     format_file(friendly_hpp, gen_friendly_hpp(p.structs))
     format_file(serialize_hpp, gen_serializer_decl(p.structs))
-    format_file(serialize_cpp, gen_serializer(p.structs, friendly_hpp))
+
+    friendly_path, friendly_filename = os.path.split(friendly_hpp)
+    rel_path = os.path.relpath('.', friendly_path)
+
+    format_file(
+        serialize_cpp,
+        gen_serializer(p.structs, friendly_filename, rel_path))
 
 parser = argparse.ArgumentParser()
 parser.add_argument('filename')

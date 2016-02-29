@@ -23,7 +23,7 @@ namespace $namespace
 $inner
 }""")
 
-SERIALIZE_TEMPLATE = Template("""#include "deferred_writer.hpp"
+SERIALIZE_TEMPLATE = Template("""#include "$rel_path/deferred_writer.hpp"
 #include "$friendly_name"
 
 namespace $namespace
@@ -48,18 +48,8 @@ def gen_friendly_hpp(structs):
         'inner': '\n'.join(res)})
 
 
-def gen_serializer(structs, friendly_name):
-    res = []
-    for s in structs:
-        res.extend(gen_struct_serializer(s))
-
-    return SERIALIZE_TEMPLATE.substitute({
-        'namespace': input_parser_common.FRIENDLY_NAMESPACE,
-        'friendly_name': friendly_name,
-        'inner': ''.join(res)})
-
-
 def gen_serializer_decl(structs):
+    # return the forward declarations for the serializer code
     funcs, types = [], []
     for s in structs:
         t, f = gen_struct_serializer_decl(s)
@@ -85,6 +75,18 @@ def gen_struct_serializer_decl(s):
     return types, funcs
 
 
+def gen_serializer(structs, friendly_name, rel_path):
+    res = []
+    for s in structs:
+        res.extend(gen_struct_serializer(s))
+
+    return SERIALIZE_TEMPLATE.substitute({
+        'namespace': input_parser_common.FRIENDLY_NAMESPACE,
+        'friendly_name': friendly_name,
+        'rel_path': rel_path,
+        'inner': ''.join(res)})
+
+
 def gen_struct_serializer(s):
     # write a serializer for the given struct
 
@@ -98,6 +100,9 @@ def gen_struct_serializer(s):
         res.append("Write%s(obj.%s, writer);\n" % (name, var))
 
     var_len = []
+
+    if s.parent:
+        res.append("Write%s(obj, writer);\n" % (s.parent))
 
     for var in s.vars:
         # All variable length vars are collected and written out last
@@ -150,9 +155,11 @@ def _format_struct(s):
         inner = '\n'.join(inner)
         t = STRUCT_TEMPLATE_INNER
 
+    name = s.name if not s.parent else ('%s : %s' % (s.name, s.parent))
+
     vars = '\n'.join([_format_var(v) for v in s.vars])
     r = t.substitute(
-        {'name': s.name, 'vars': vars, 'inner': inner})
+        {'name': name, 'vars': vars, 'inner': inner})
     res.append(r)
 
     return res

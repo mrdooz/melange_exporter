@@ -43,9 +43,11 @@ def format_struct(s):
         inner = '\n'.join(inner)
         t = STRUCT_TEMPLATE_INNER
 
+    name = s.name if not s.parent else ('%s : %s' % (s.name, s.parent))
+
     vars = '\n'.join([format_var(v) for v in s.vars])
     r = t.substitute(
-        {'name': s.name, 'vars': vars, 'inner': inner})
+        {'name': name, 'vars': vars, 'inner': inner})
     res.append(r)
 
     return res
