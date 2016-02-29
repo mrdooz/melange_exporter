@@ -67,7 +67,7 @@ inline bool IsQuad(const T& p)
 }
 
 //-----------------------------------------------------------------------------
-void CollectVertices(melange::PolygonObject* polyObj, exporter::Mesh* mesh)
+static void CollectVertices(melange::PolygonObject* polyObj, exporter::Mesh* mesh)
 {
   // get point and polygon array pointer and counts
   const melange::Vector* verts = polyObj->GetPointR();
@@ -234,7 +234,7 @@ void CollectVertices(melange::PolygonObject* polyObj, exporter::Mesh* mesh)
 }
 
 //-----------------------------------------------------------------------------
-void CollectMeshMaterials(melange::PolygonObject* obj, exporter::Mesh* mesh)
+static void CollectMeshMaterials(melange::PolygonObject* obj, exporter::Mesh* mesh)
 {
   unordered_set<u32> selectedPolys;
 

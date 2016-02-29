@@ -176,43 +176,6 @@ namespace exporter
 #endif
   }
 
-  struct Nibbler
-  {
-    Nibbler()
-    {
-      bytes.push_back(0);
-    }
-
-    void AddNibble(u8 nibble)
-    {
-      if (phase)
-      {
-        bytes.back() |= (nibble << 4);
-        bytes.push_back(0);
-      }
-      else
-      {
-        bytes.back() |= nibble;
-      }
-
-      phase ^= 1;
-    }
-
-    bool HasNibble(u8 nibble)
-    {
-      for (u8 b : bytes)
-      {
-        if ((b & 0xf) == nibble || ((b >> 4) & 0xf) == nibble)
-          return true;
-      }
-
-      return false;
-    }
-
-    int phase = 0;
-    vector<u8> bytes;
-  };
-
   struct VertexFormat
   {
     void Add(protocol::VertexFormat2 fmt, protocol::VertexFlags2 flags)
