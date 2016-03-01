@@ -1,18 +1,11 @@
 import input_parser_common
 from input_parser_common import (
-    snake_to_title, snake_to_camel, USER_TYPES)
+    snake_to_title, snake_to_camel)
 from string import Template
-
-STRUCT_TEMPLATE_INNER = Template("""struct $name
-{
-$inner
-$vars
-};
-""")
 
 STRUCT_TEMPLATE = Template("""struct $name
 {
-$vars
+$inner $enums $vars
 };
 """)
 
@@ -22,8 +15,12 @@ namespace $namespace
 $inner
 }""")
 
+USER_TYPES = None
 
-def gen_binary_hpp(structs):
+
+def gen_binary_hpp(structs, user_types):
+    global USER_TYPES
+    USER_TYPES = user_types
     res = []
     for s in structs:
         res.extend(format_struct(s))
@@ -41,13 +38,18 @@ def format_struct(s):
         for c in s.children:
             inner.extend(format_struct(c))
         inner = '\n'.join(inner)
-        t = STRUCT_TEMPLATE_INNER
 
     name = s.name if not s.parent else ('%s : %s' % (s.name, s.parent))
 
+    enums = []
+    for enum in s.enums:
+        vals = ['%s = %d' % (k, v) for k, v in enum.vals]
+        enums.append('enum class %s { %s };\n' % (enum.name, ',\n'.join(vals)))
+    enums = ''.join(enums)
+
     vars = '\n'.join([format_var(v) for v in s.vars])
     r = t.substitute(
-        {'name': name, 'vars': vars, 'inner': inner})
+        {'name': name, 'enums': enums, 'vars': vars, 'inner': inner})
     res.append(r)
 
     return res
@@ -75,9 +77,9 @@ def format_var(var):
     else:
         # user types are saved as pointers, because we might not
         # know their size
-        if user_type:
-            res.append('%s* %s;' % (base_type, camel_var))
-        else:
+        if var.category in ('basic', 'enum'):
             res.append('%s %s;' % (base_type, camel_var))
+        else:
+            res.append('%s* %s;' % (base_type, camel_var))
 
     return '\n'.join(res)

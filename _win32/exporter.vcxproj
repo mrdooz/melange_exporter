@@ -166,7 +166,7 @@
     <ClCompile Include="..\export_mesh.cpp" />
     <ClCompile Include="..\export_misc.cpp" />
     <ClCompile Include="..\exporter_utils.cpp" />
-    <ClCompile Include="..\generated\output_format.serialize.cpp" />
+    <ClCompile Include="..\generated\output_format.friendly.cpp" />
     <ClCompile Include="..\melange_helpers.cpp" />
     <ClCompile Include="..\save_scene.cpp" />
     <ClCompile Include="..\compress\forsythtriangleorderoptimizer.cpp" />
@@ -201,7 +201,6 @@
     <ClInclude Include="..\exporter_utils.hpp" />
     <ClInclude Include="..\generated\output_format.binary.hpp" />
     <ClInclude Include="..\generated\output_format.friendly.hpp" />
-    <ClInclude Include="..\generated\output_format.serialize.hpp" />
     <ClInclude Include="..\melange_helpers.hpp" />
     <ClInclude Include="..\precompiled.hpp" />
     <ClInclude Include="..\save_scene.hpp" />

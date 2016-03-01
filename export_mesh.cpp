@@ -3,6 +3,42 @@
 #include "export_misc.hpp"
 #include "exporter_utils.hpp"
 
+static melange::AlienMaterial* DEFAULT_MATERIAL_PTR = nullptr;
+//-----------------------------------------------------------------------------
+template <typename Dst, typename Src>
+Dst Vector3Coerce(const Src& src)
+{
+  return Dst(src.x, src.y, src.z);
+}
+
+//-----------------------------------------------------------------------------
+template <typename Ret, typename Src>
+Ret AlphabetIndex(const Src& src, int idx)
+{
+  switch (idx)
+  {
+  case 0: return src.a;
+  case 1: return src.b;
+  case 2: return src.c;
+  case 3: return src.d;
+  }
+
+  return Ret();
+}
+
+//-----------------------------------------------------------------------------
+static int VertexIdFromPoly(const melange::CPolygon& poly, int idx)
+{
+  switch (idx)
+  {
+    case 0: return poly.a;
+    case 1: return poly.b;
+    case 2: return poly.c;
+    case 3: return poly.d;
+  }
+  return -1;
+}
+
 //-----------------------------------------------------------------------------
 void AddIndices(vector<int>* indices, int a, int b, int c)
 {
@@ -18,6 +54,23 @@ void AddVector2(vector<float>* out, const T& v, bool flipY)
   out->push_back(v.x);
   out->push_back(flipY ? 1 - v.y : v.y);
 };
+
+//-----------------------------------------------------------------------------
+template <typename T>
+void CopyOutVector2(float* dst, const T& src)
+{
+  dst[0] = src.x;
+  dst[1] = src.y;
+}
+
+//-----------------------------------------------------------------------------
+template <typename T>
+void CopyOutVector3(float* dst, const T& src)
+{
+  dst[0] = src.x;
+  dst[1] = src.y;
+  dst[2] = src.z;
+}
 
 //-----------------------------------------------------------------------------
 template <typename T>
@@ -67,16 +120,9 @@ inline bool IsQuad(const T& p)
 }
 
 //-----------------------------------------------------------------------------
-static void CollectVertices(melange::PolygonObject* polyObj, exporter::Mesh* mesh)
+static void CalcBoundingSphere(
+    const melange::Vector* verts, int vertexCount, exporter::Vec3f* outCenter, float* outRadius)
 {
-  // get point and polygon array pointer and counts
-  const melange::Vector* verts = polyObj->GetPointR();
-  const melange::CPolygon* polysOrg = polyObj->GetPolygonR();
-
-  int vertexCount = polyObj->GetPointCount();
-  if (!vertexCount)
-    return;
-
   // calc bounding sphere (get center and max radius)
   melange::Vector center(verts[0]);
   for (int i = 1; i < vertexCount; ++i)
@@ -92,154 +138,70 @@ static void CollectVertices(melange::PolygonObject* polyObj, exporter::Mesh* mes
     radius = max(radius, cand);
   }
 
-  mesh->boundingSphere.center = center;
-  mesh->boundingSphere.radius = sqrtf(radius);
+  *outCenter = center;
+  *outRadius = sqrtf(radius);
+}
 
-  // Loop over all the materials, and add the polygons in the order they appear per material
-  struct Polygon
+static u32 FnvHash(const char* str, u32 d = 0x01000193)
+{
+  while (true)
   {
-    int a, b, c, d;
-  };
-
-  vector<Polygon> polys;
-  polys.reserve(polyObj->GetPolygonCount());
-
-  int numPolys = 0;
-  int idx = 0;
-  for (const pair<u32, vector<int>>& kv : mesh->polysByMaterial)
-  {
-    exporter::Mesh::MaterialGroup mg;
-    mg.materialId = kv.first;
-    mg.startIndex = idx;
-    numPolys += (int)kv.second.size();
-
-    for (int i : kv.second)
-    {
-      polys.push_back({ polysOrg[i].a, polysOrg[i].b, polysOrg[i].c, polysOrg[i].d });
-
-      // increment index counter. if the polygon is a quad, then double the increment
-      if (polysOrg[i].c == polysOrg[i].d)
-        idx += 3;
-      else
-        idx += 2 * 3;
-    }
-    mg.numIndices = idx - mg.startIndex;
-    mesh->materialGroups.push_back(mg);
+    char c = *str++;
+    if (!c)
+      return d;
+    d = ((d * 0x01000193) ^ c) & 0xffffffff;
   }
-
-  u32 numVerts = 0;
-  for (int i = 0; i < numPolys; ++i)
-  {
-    numVerts += IsQuad(polys[i]) ? 4 : 3;
-  }
-
-  // Check what kind of normals exist
-  bool hasNormalsTag = !!polyObj->GetTag(Tnormal);
-  bool hasPhongTag = !!polyObj->GetTag(Tphong);
-  bool hasNormals = hasNormalsTag || hasPhongTag;
-
-  melange::Vector32* phongNormals = hasPhongTag ? polyObj->CreatePhongNormals() : nullptr;
-  melange::NormalTag* normals =
-    hasNormalsTag ? (melange::NormalTag*)polyObj->GetTag(Tnormal) : nullptr;
-  melange::UVWTag* uvs = (melange::UVWTag*)polyObj->GetTag(Tuvw);
-  melange::ConstUVWHandle uvHandle = uvs ? uvs->GetDataAddressR() : nullptr;
-
-  // add verts
-  mesh->verts.reserve(numVerts * 3);
-  mesh->normals.reserve(numVerts * 3);
-  mesh->indices.reserve(numVerts * 3);
-  mesh->uv.reserve(numVerts * 3);
-
-  melange::ConstNormalHandle normalHandle = normals ? normals->GetDataAddressR() : nullptr;
-
-  u32 vertOfs = 0;
-
-  for (int i = 0; i < numPolys; ++i)
-  {
-    int idx0 = polys[i].a;
-    int idx1 = polys[i].b;
-    int idx2 = polys[i].c;
-    int idx3 = polys[i].d;
-    bool isQuad = IsQuad(polys[i]);
-
-    // face 0, 1, 2
-    Add3Vector3(&mesh->verts, verts[idx0], verts[idx1], verts[idx2]);
-    AddIndices(&mesh->indices, vertOfs + 0, vertOfs + 1, vertOfs + 2);
-
-    if (isQuad)
-    {
-      // face 0, 2, 3
-      AddVector3(&mesh->verts, verts[idx3]);
-      AddIndices(&mesh->indices, vertOfs + 0, vertOfs + 2, vertOfs + 3);
-      vertOfs += 4;
-    }
-    else
-    {
-      vertOfs += 3;
-    }
-
-    if (hasNormals)
-    {
-      if (hasNormalsTag)
-      {
-        melange::NormalStruct normal;
-        normals->Get(normalHandle, i, normal);
-        Add3Vector3(&mesh->normals, normal.a, normal.b, normal.c);
-
-        if (isQuad)
-        {
-          AddVector3(&mesh->normals, normal.d);
-        }
-      }
-      else if (hasPhongTag)
-      {
-        Add3Vector3(&mesh->normals,
-          phongNormals[i * 4 + 0],
-          phongNormals[i * 4 + 1],
-          phongNormals[i * 4 + 2]);
-
-        if (isQuad)
-        {
-          AddVector3(&mesh->normals, phongNormals[i * 4 + 3]);
-        }
-      }
-    }
-    else
-    {
-      // no normals, so generate polygon normals and use them for all verts
-      melange::Vector normal = CalcNormal(verts[idx0], verts[idx1], verts[idx2]);
-      Add3Vector3(&mesh->normals, normal, normal, normal);
-      if (isQuad)
-      {
-        AddVector3(&mesh->normals, normal);
-      }
-    }
-
-    if (uvHandle)
-    {
-      melange::UVWStruct s;
-      melange::UVWTag::Get(uvHandle, i, s);
-
-      Add3Vector2(&mesh->uv, s.a, s.b, s.c, true);
-      if (isQuad)
-      {
-        // face 0, 2, 3
-        AddVector2(&mesh->uv, s.d, true);
-      }
-    }
-  }
-
-  if (phongNormals)
-    melange::_MemFree((void**)&phongNormals);
 }
 
 //-----------------------------------------------------------------------------
-static void CollectMeshMaterials(melange::PolygonObject* obj, exporter::Mesh* mesh)
+struct FatVertex
 {
-  unordered_set<u32> selectedPolys;
+  FatVertex()
+  {
+    memset(this, 0, sizeof(FatVertex));
+  }
 
-  u32 prevMaterial = ~0u;
-  u32 firstMaterial = ~0u;
+  melange::Vector pos = melange::Vector(0,0,0);
+  melange::Vector normal = melange::Vector(0,0,0);
+  melange::Vector uv = melange::Vector(0,0,0);
+
+  u32 GetHash() const
+  {
+    if (meta.hash == 0)
+      meta.hash = FnvHash((const char*)this, sizeof(FatVertex) - sizeof(meta));
+    return meta.hash;
+  }
+
+  friend bool operator==(const FatVertex& lhs, const FatVertex& rhs)
+  {
+    return lhs.pos == rhs.pos && lhs.normal == rhs.normal && lhs.uv == rhs.uv;
+  }
+
+  struct Hash
+  {
+    size_t operator()(const FatVertex& v) const
+    {
+      return v.GetHash();
+    }
+  };
+
+  struct
+  {
+    int id = 0;
+    mutable u32 hash = 0;
+  } meta;
+};
+
+//-----------------------------------------------------------------------------
+static void GroupPolysByMaterial(melange::PolygonObject* obj,
+    unordered_map<melange::AlienMaterial*, vector<int>>* polysByMaterial)
+{
+  // Keep track of which polys we've seen, so we can lump all the unseen ones with the first
+  // material
+  unordered_set<u32> seenPolys;
+
+  melange::AlienMaterial* prevMaterial = nullptr;
+  melange::AlienMaterial* firstMaterial = nullptr;
 
   // For each material found, check if the following tag is a selection tag, in which
   // case record which polys belong to it
@@ -249,77 +211,229 @@ static void CollectMeshMaterials(melange::PolygonObject* obj, exporter::Mesh* me
     if (btag->GetType() == Ttexture)
     {
       melange::GeData data;
-      melange::AlienMaterial* mat = btag->GetParameter(melange::TEXTURETAG_MATERIAL, data)
+      prevMaterial = btag->GetParameter(melange::TEXTURETAG_MATERIAL, data)
         ? (melange::AlienMaterial*)data.GetLink()
         : NULL;
-      if (!mat)
+      if (!prevMaterial)
         continue;
 
-      auto materialIt = find_if(
-        RANGE(g_scene.materials), [mat](const exporter::Material* m) { return m->mat == mat; });
-      if (materialIt == g_scene.materials.end())
-        continue;
-
-      exporter::Material* bobaMaterial = *materialIt;
-      prevMaterial = bobaMaterial->id;
-      if (firstMaterial == ~0u)
-        firstMaterial = bobaMaterial->id;
+      // Mark the first material we find, so we can stick all unselected polys in it
+      if (!firstMaterial)
+        firstMaterial = prevMaterial;
     }
 
     // Polygon Selection Tag
     if (btag->GetType() == Tpolygonselection && obj->GetType() == Opolygon)
     {
-      // skip this selection tag if we can't find a previous material. i don't like relying things
+      // skip this selection tag if we don't have a previous material. i don't like relying things
       // just appearing in the correct order, but right now i don't know of a better way
-      if (prevMaterial == ~0u)
-      {
+      if (!prevMaterial)
         continue;
-      }
 
       if (melange::BaseSelect* bs = ((melange::SelectionTag*)btag)->GetBaseSelect())
       {
-        auto& polysByMaterial = mesh->polysByMaterial[prevMaterial];
+        vector<int>& polysForMaterial = (*polysByMaterial)[prevMaterial];
         for (int i = 0, e = obj->GetPolygonCount(); i < e; ++i)
         {
           if (bs->IsSelected(i))
           {
-            polysByMaterial.push_back(i);
-            selectedPolys.insert(i);
+            polysForMaterial.push_back(i);
+            seenPolys.insert(i);
           }
         }
       }
 
       // reset the previous material flag to avoid double selection tags causing trouble
-      prevMaterial = ~0u;
+      prevMaterial = nullptr;
     }
   }
 
   // if no materials are found, just add them to a dummy material
-  if (firstMaterial == ~0u)
+  if (!firstMaterial)
   {
-    u32 dummyMaterial = DEFAULT_MATERIAL;
-    auto& polysByMaterial = mesh->polysByMaterial[dummyMaterial];
+    vector<int>& polysForMaterial = (*polysByMaterial)[DEFAULT_MATERIAL_PTR];
     for (int i = 0, e = obj->GetPolygonCount(); i < e; ++i)
     {
-      polysByMaterial.push_back(i);
+      polysForMaterial.push_back(i);
     }
   }
   else
   {
     // add all the polygons that aren't selected to the first material
-    auto& polysByMaterial = mesh->polysByMaterial[firstMaterial];
+    vector<int>& polysForMaterial = (*polysByMaterial)[firstMaterial];
     for (int i = 0, e = obj->GetPolygonCount(); i < e; ++i)
     {
-      if (selectedPolys.count(i) == 0)
-        polysByMaterial.push_back(i);
+      if (seenPolys.count(i) == 0)
+        polysForMaterial.push_back(i);
     }
   }
 
-  for (auto g : mesh->polysByMaterial)
+  // print polys per material stats.
+  for (auto g : (*polysByMaterial))
   {
+    melange::AlienMaterial* mat = g.first;
     const char* materialName =
-      g.first == DEFAULT_MATERIAL ? "<default>" : g_scene.materials[g.first]->name.c_str();
+      mat == DEFAULT_MATERIAL_PTR ? "<default>" : CopyString(mat->GetName()).c_str();
     LOG(2, "material: %s, %d polys\n", materialName, (int)g.second.size());
+  }
+}
+
+//-----------------------------------------------------------------------------
+struct FatVertexSupplier
+{
+  FatVertexSupplier(melange::PolygonObject* polyObj)
+  {
+    hasNormalsTag = !!polyObj->GetTag(Tnormal);
+    hasPhongTag = !!polyObj->GetTag(Tphong);
+    hasNormals = hasNormalsTag || hasPhongTag;
+
+    phongNormals = hasPhongTag ? polyObj->CreatePhongNormals() : nullptr;
+    normals = hasNormalsTag ? (melange::NormalTag*)polyObj->GetTag(Tnormal) : nullptr;
+    uvs = (melange::UVWTag*)polyObj->GetTag(Tuvw);
+    uvHandle = uvs ? uvs->GetDataAddressR() : nullptr;
+    normalHandle = normals ? normals->GetDataAddressR() : nullptr;
+
+    verts = polyObj->GetPointR();
+    polys = polyObj->GetPolygonR();
+  }
+
+  ~FatVertexSupplier()
+  {
+    if (phongNormals)
+      melange::_MemFree((void**)&phongNormals);
+  }
+
+  int AddVertex(int polyIdx, int vertIdx)
+  {
+    const melange::CPolygon& poly = polys[polyIdx];
+
+    FatVertex vtx;
+    vtx.pos = verts[AlphabetIndex<int>(poly, vertIdx)];
+
+    if (hasNormals)
+    {
+      if (hasNormalsTag)
+      {
+        melange::NormalStruct normal;
+        normals->Get(normalHandle, polyIdx, normal);
+        vtx.normal = AlphabetIndex<melange::Vector>(normal, vertIdx);
+      }
+      else if (hasPhongTag)
+      {
+        vtx.normal = Vector3Coerce<melange::Vector>(phongNormals[polyIdx*4+vertIdx]);
+      }
+    }
+    else
+    {
+      // no normals, so generate polygon normals and use them for all verts
+      int idx0 = AlphabetIndex<int>(poly, 0);
+      int idx1 = AlphabetIndex<int>(poly, 1);
+      int idx2 = AlphabetIndex<int>(poly, 2);
+      vtx.normal = CalcNormal(verts[idx0], verts[idx1], verts[idx2]);
+    }
+
+    if (uvHandle)
+    {
+      melange::UVWStruct s;
+      melange::UVWTag::Get(uvHandle, polyIdx, s);
+      vtx.uv = AlphabetIndex<melange::Vector>(s, vertIdx);
+    }
+
+    // Check if the fat vertex already exists
+    auto it = fatVertSet.find(vtx);
+    if (it != fatVertSet.end())
+      return it->meta.id;
+
+    vtx.meta.id = (int)fatVerts.size();
+    fatVertSet.insert(vtx);
+    fatVerts.push_back(vtx);
+    return vtx.meta.id;
+  }
+
+  const melange::Vector* verts;
+  const melange::CPolygon* polys;
+
+  bool hasNormalsTag;
+  bool hasPhongTag;
+  bool hasNormals;
+
+  melange::Vector32* phongNormals;
+  melange::NormalTag* normals;
+  melange::UVWTag* uvs;
+  melange::ConstUVWHandle uvHandle;
+  melange::ConstNormalHandle normalHandle;
+
+  unordered_set<FatVertex, FatVertex::Hash> fatVertSet;
+  vector<FatVertex> fatVerts;
+};
+
+
+//-----------------------------------------------------------------------------
+static void CollectVertices(melange::PolygonObject* polyObj,
+    const unordered_map<melange::AlienMaterial*, vector<int>>& polysByMaterial,
+    exporter::Mesh* mesh)
+{
+  int vertexCount = polyObj->GetPointCount();
+  if (!vertexCount)
+  {
+    // TODO: log
+    return;
+  }
+
+  const melange::Vector* verts = polyObj->GetPointR();
+  const melange::CPolygon* polys = polyObj->GetPolygonR();
+
+  CalcBoundingSphere(
+    verts, vertexCount, &mesh->boundingSphere.center, &mesh->boundingSphere.radius);
+
+  FatVertexSupplier fatVtx(polyObj);
+  int startIdx = 0;
+
+  // Create the material groups, where each group contains polygons that share the same material
+  for (const pair<melange::AlienMaterial*, vector<int>>& kv : polysByMaterial)
+  {
+    exporter::Mesh::MaterialGroup mg;
+    mg.mat = kv.first;
+    mg.startIndex = startIdx;
+
+    // iterate over all the polygons in the material group, and collect the vertices
+    for (int polyIdx : kv.second)
+    {
+      int idx0 = fatVtx.AddVertex(polyIdx, 0);
+      int idx1 = fatVtx.AddVertex(polyIdx, 1);
+      int idx2 = fatVtx.AddVertex(polyIdx, 2);
+
+      mesh->indices.push_back(idx0);
+      mesh->indices.push_back(idx1);
+      mesh->indices.push_back(idx2);
+      startIdx += 3;
+
+      if (IsQuad(polys[polyIdx]))
+      {
+        int idx3 = fatVtx.AddVertex(polyIdx, 3);
+        mesh->indices.push_back(idx0);
+        mesh->indices.push_back(idx2);
+        mesh->indices.push_back(idx3);
+        startIdx += 3;
+      }
+    }
+    mg.numIndices = startIdx - mg.startIndex;
+    mesh->materialGroups.push_back(mg);
+  }
+
+  // copy the data over from the fat vertices
+  int numFatVerts = (int)fatVtx.fatVerts.size();
+  mesh->verts.resize(numFatVerts * 3);
+  mesh->normals.resize(numFatVerts * 3);
+  if (fatVtx.uvHandle)
+    mesh->uv.resize(numFatVerts * 2);
+
+  for (int i = 0; i < numFatVerts; ++i)
+  {
+    CopyOutVector3(&mesh->verts[i * 3], fatVtx.fatVerts[i].pos);
+    CopyOutVector3(&mesh->normals[i * 3], fatVtx.fatVerts[i].normal);
+    if (fatVtx.uvHandle)
+      CopyOutVector2(&mesh->normals[i * 2], fatVtx.fatVerts[i].uv);
   }
 }
 
@@ -330,10 +444,10 @@ bool melange::AlienPolygonObjectData::Execute()
   PolygonObject* polyObj = (PolygonObject*)baseObj;
 
   exporter::Mesh* mesh = new exporter::Mesh(baseObj);
-  CollectionAnimationTracks(baseObj, &mesh->animTracks);
 
-  CollectMeshMaterials(polyObj, mesh);
-  CollectVertices(polyObj, mesh);
+  unordered_map<melange::AlienMaterial*, vector<int>> polysByMaterial;
+  GroupPolysByMaterial(polyObj, &polysByMaterial);
+  CollectVertices(polyObj, polysByMaterial, mesh);
 
 #if WITH_XFORM_MTX
   CopyMatrix(polyObj->GetMl(), mesh->mtxLocal);

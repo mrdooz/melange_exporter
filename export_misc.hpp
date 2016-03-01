@@ -1,8 +1,9 @@
 #pragma once
 #include "exporter.hpp"
 
-void CollectionAnimationTracks(melange::BaseList2D* bl, vector<exporter::Track>* tracks);
+void CollectionAnimationTracksForObj(melange::BaseList2D* bl, vector<exporter::Track>* tracks);
 void CollectMaterials(melange::AlienBaseDocument* c4dDoc);
+void CollectMaterials2(melange::AlienBaseDocument* c4dDoc);
 void ExportSpline(melange::BaseObject* obj);
 
 namespace melange

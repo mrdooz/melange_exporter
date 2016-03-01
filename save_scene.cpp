@@ -310,7 +310,7 @@ namespace exporter
 
     // Don't save UVs if using the default material
     if (mesh->uv.size() && mesh->materialGroups.size() == 1
-      && mesh->materialGroups[0].materialId == DEFAULT_MATERIAL)
+      && !mesh->materialGroups[0].mat)
     {
       fmt.Add(protocol::VFORMAT2_TEX2, protocol::VFLAG2_NONE);
       copy(mesh->uv.begin(), mesh->uv.end(), back_inserter(vertexData));

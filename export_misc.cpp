@@ -1,6 +1,6 @@
 #include "export_misc.hpp"
-#include "melange_helpers.hpp"
 #include "exporter_utils.hpp"
+#include "melange_helpers.hpp"
 
 //-----------------------------------------------------------------------------
 bool melange::AlienPrimitiveObjectData::Execute()
@@ -13,14 +13,33 @@ bool melange::AlienPrimitiveObjectData::Execute()
 }
 
 //-----------------------------------------------------------------------------
+void ExportSplineChildren(melange::BaseObject* baseObj)
+{
+  // Export spline objects that are children to the null object
+  vector<melange::BaseObject*> children;
+  GetChildren(baseObj, &children);
+  for (melange::BaseObject* obj : children)
+  {
+    int type = obj->GetType();
+    switch (type)
+    {
+      case Ospline:
+      {
+        ExportSpline(obj);
+        break;
+      }
+    }
+  }
+}
+
+//-----------------------------------------------------------------------------
 bool melange::AlienNullObjectData::Execute()
 {
   melange::BaseObject* baseObj = (melange::BaseObject*)GetNode();
-
   const string name = CopyString(baseObj->GetName());
 
+#if WITH_SCENE_1
   exporter::NullObject* nullObject = new exporter::NullObject(baseObj);
-  CollectionAnimationTracks(baseObj, &nullObject->animTracks);
 #if WITH_XFORM_MTX
   CopyMatrix(baseObj->GetMl(), nullObject->mtxLocal);
   CopyMatrix(baseObj->GetMg(), nullObject->mtxGlobal);
@@ -31,27 +50,25 @@ bool melange::AlienNullObjectData::Execute()
 
   g_scene.nullObjects.push_back(nullObject);
 
-  // Export spline objects that are children to the null object
-  vector<BaseObject*> children;
-  GetChildren(baseObj, &children);
-  for (BaseObject* obj : children)
+  ExportSplineChildren(baseObj);
+#endif
+
   {
-    Int32 type = obj->GetType();
-    switch (type)
-    {
-    case Ospline:
-    {
-      ExportSpline(obj);
-      break;
-    }
-    }
+    shared_ptr<scene::NullObject> nullObject = make_shared<scene::NullObject>();
+    nullObject->name = name;
+    nullObject->id = g_ObjectId.NextId();
+
+    CopyTransform(baseObj->GetMl(), &nullObject->xformLocal);
+    CopyTransform(baseObj->GetMg(), &nullObject->xformGlobal);
+
+    g_Scene2.nullObjects.push_back(nullObject);
   }
 
   return true;
 }
 
 //-----------------------------------------------------------------------------
-void CollectionAnimationTracks(melange::BaseList2D* bl, vector<exporter::Track>* tracks)
+void CollectionAnimationTracksForObj(melange::BaseList2D* bl, vector<exporter::Track>* tracks)
 {
   if (!bl || !bl->GetFirstCTrack())
     return;
@@ -88,7 +105,7 @@ void CollectionAnimationTracks(melange::BaseList2D* bl, vector<exporter::Track>*
         if (ct->GetTrackCategory() == melange::PSEUDO_VALUE)
         {
           curve.keyframes.push_back(
-            exporter::Keyframe{ (int)t.GetFrame(g_Doc->GetFps()), ck->GetValue() });
+              exporter::Keyframe{(int)t.GetFrame(g_Doc->GetFps()), ck->GetValue()});
         }
         else if (ct->GetTrackCategory() == melange::PSEUDO_PLUGIN && ct->GetType() == CTpla)
         {
@@ -138,34 +155,90 @@ void CollectMaterials(melange::AlienBaseDocument* c4dDoc)
       exporterMaterial->flags |= exporter::Material::FLAG_COLOR;
       exporterMaterial->color.brightness = GetFloatParam(mat, melange::MATERIAL_COLOR_BRIGHTNESS);
       exporterMaterial->color.color =
-        GetVectorParam<exporter::Color>(mat, melange::MATERIAL_COLOR_COLOR);
+          GetVectorParam<exporter::Color>(mat, melange::MATERIAL_COLOR_COLOR);
     }
 
     if (((melange::Material*)mat)->GetChannelState(CHANNEL_REFLECTION))
     {
       exporterMaterial->flags |= exporter::Material::FLAG_REFLECTION;
       exporterMaterial->reflection.brightness =
-        GetFloatParam(mat, melange::MATERIAL_REFLECTION_BRIGHTNESS);
+          GetFloatParam(mat, melange::MATERIAL_REFLECTION_BRIGHTNESS);
       exporterMaterial->reflection.color =
-        GetVectorParam<exporter::Color>(mat, melange::MATERIAL_REFLECTION_COLOR);
+          GetVectorParam<exporter::Color>(mat, melange::MATERIAL_REFLECTION_COLOR);
+    }
+  }
+}
+
+//-----------------------------------------------------------------------------
+void CollectMaterials2(melange::AlienBaseDocument* c4dDoc)
+{
+  // add default material
+  shared_ptr<scene::Material> defaultMaterial = make_shared<scene::Material>();
+  defaultMaterial->name = "<default>";
+  defaultMaterial->id = ~0;
+  defaultMaterial->components.push_back(make_shared<scene::Material::Component>(
+      scene::Material::Component{'COLR', 1, 1, 1, 1, "", 1}));
+  g_Scene2.materials.push_back(defaultMaterial);
+
+  for (melange::BaseMaterial* baseMat = c4dDoc->GetFirstMaterial(); baseMat;
+       baseMat = baseMat->GetNext())
+  {
+    // check if the material is a standard material
+    if (baseMat->GetType() != Mmaterial)
+      continue;
+
+    scene::Material* sceneMat = new scene::Material();
+    string name = CopyString(baseMat->GetName());
+    sceneMat->name = CopyString(baseMat->GetName());
+    sceneMat->id = g_MaterialId.NextId();
+    g_MaterialIdToObj[sceneMat->id] = baseMat;
+
+    melange::Material* mat = (melange::Material*)baseMat;
+
+    // check if the given channel is used in the material
+    if (mat->GetChannelState(CHANNEL_COLOR))
+    {
+      exporter::Color col = GetVectorParam<exporter::Color>(baseMat, melange::MATERIAL_COLOR_COLOR);
+      sceneMat->components.push_back(
+          make_shared<scene::Material::Component>(scene::Material::Component{'COLR',
+              col.r,
+              col.g,
+              col.b,
+              col.a,
+              "",
+              GetFloatParam(baseMat, melange::MATERIAL_COLOR_BRIGHTNESS)}));
+    }
+
+    if (mat->GetChannelState(CHANNEL_REFLECTION))
+    {
+      exporter::Color col =
+          GetVectorParam<exporter::Color>(baseMat, melange::MATERIAL_REFLECTION_COLOR);
+      sceneMat->components.push_back(
+          make_shared<scene::Material::Component>(scene::Material::Component{'REFL',
+              col.r,
+              col.g,
+              col.b,
+              col.a,
+              "",
+              GetFloatParam(baseMat, melange::MATERIAL_REFLECTION_BRIGHTNESS)}));
     }
   }
 }
 
 //-----------------------------------------------------------------------------
 exporter::BaseObject::BaseObject(melange::BaseObject* melangeObj)
-  : melangeObj(melangeObj)
-  , parent(g_scene.FindObject(melangeObj->GetUp()))
-  , name(CopyString(melangeObj->GetName()))
-  , id(Scene::nextObjectId++)
+    : melangeObj(melangeObj)
+    , parent(g_scene.FindObject(melangeObj->GetUp()))
+    , name(CopyString(melangeObj->GetName()))
+    , id(Scene::nextObjectId++)
 {
   LOG(1, "Exporting: %s\n", name.c_str());
   melange::BaseObject* melangeParent = melangeObj->GetUp();
   if ((!!melangeParent) ^ (!!parent))
   {
     LOG(1,
-      "  Unable to find parent! (%s)\n",
-      melangeParent ? CopyString(melangeParent->GetName()).c_str() : "");
+        "  Unable to find parent! (%s)\n",
+        melangeParent ? CopyString(melangeParent->GetName()).c_str() : "");
     valid = false;
   }
 

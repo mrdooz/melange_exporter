@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include <functional>
 #include <iterator>
+#include <memory>
 
 #include <c4d_file.h>
 #include <c4d_ccurve.h>
@@ -30,3 +31,4 @@ typedef int32_t s32;
 using namespace std;
 
 #define RANGE(c) (c).begin(), (c).end()
+#define WITH_SCENE_1 0

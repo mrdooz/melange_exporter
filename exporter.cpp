@@ -37,6 +37,7 @@ namespace
 melange::AlienBaseDocument* g_Doc;
 melange::HyperFile* g_File;
 
+scene::Scene g_Scene2;
 exporter::Scene g_scene;
 exporter::Options options;
 // Fixup functions called after the scene has been read and processed.
@@ -45,6 +46,7 @@ vector<function<bool()>> g_deferredFunctions;
 u32 exporter::Scene::nextObjectId = 1;
 u32 exporter::Material::nextId;
 
+unordered_map<melange::BaseObject*, vector<exporter::Track>> g_AnimationTracks;
 
 //-----------------------------------------------------------------------------
 string FilenameFromInput(const string& inputFilename, bool stripPath)
@@ -159,6 +161,15 @@ bool ParseFilenames(const vector<string>& args)
 }
 
 //-----------------------------------------------------------------------------
+void CollectAnimationTracks()
+{
+  for (melange::BaseObject* obj = g_Doc->GetFirstObject(); obj; obj = obj->GetNext())
+  {
+    CollectionAnimationTracksForObj(obj, &g_AnimationTracks[obj]);
+  }
+}
+
+//-----------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
   ArgParse parser;
@@ -205,7 +216,9 @@ int main(int argc, char** argv)
 
   g_File->Close();
 
+  CollectAnimationTracks();
   CollectMaterials(g_Doc);
+  CollectMaterials2(g_Doc);
   g_Doc->CreateSceneFromC4D();
 
   bool res = true;

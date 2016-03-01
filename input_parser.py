@@ -10,8 +10,11 @@ import logging
 from collections import deque
 import argparse
 import input_parser_common
-from input_parser_common import (
-    USER_TYPES, make_full_name, valid_type)
+from input_parser_common import make_full_name
+
+from input_parser_binary_hpp import gen_binary_hpp
+from input_parser_friendly_hpp import (
+    gen_friendly_hpp, gen_serializer)
 
 OUTPUT_DIR = None
 
@@ -23,6 +26,7 @@ class Struct(object):
         self.parent = parent
         self.vars = []
         self.children = []
+        self.enums = []
 
     def __repr__(self):
         return '%s%s <%r>' % (
@@ -37,12 +41,17 @@ class Struct(object):
 
 
 class Var(object):
-    def __init__(self, name, var_type, optional=False, count=None):
+    def __init__(
+        self, name, var_type, category,
+        default_value=None, optional=False, count=None
+    ):
         self.name = name
         self.type = var_type
         # Note, -1 denotes a variable length array
         self.count = count
+        self.default_value = default_value
         self.optional = optional
+        self.category = category
 
     def __repr__(self):
         return '%s: %s%s%s' % (
@@ -51,6 +60,13 @@ class Var(object):
 
     def is_fixed_size(self):
         return self.count != -1
+
+
+class Enum(object):
+    def __init__(self, name, parent, vals=None):
+        self.name = name
+        self.parent = parent
+        self.vals = vals if vals else []
 
 
 class TokenIterator(object):
@@ -89,6 +105,12 @@ class Parser(object):
     def __init__(self, filename):
         self.tokens = TokenIterator(self.create_tokens(filename))
         self.structs = []
+        self.enums = set()
+        self.user_types = set()
+        self.enums = set()
+        self.basic_types = set(['bool', 'int', 'float', 'string'])
+        self.binary_namespace = None
+        self.friendly_namespace = None
 
     def line_gen(self, f):
         # yields (line_num, line) tuples, stripping out commented and empty
@@ -150,6 +172,34 @@ class Parser(object):
                 self.err(
                     'Expected "%s" got "%s"' % (expected, token))
 
+    def valid_type(self, prefix, scope):
+        # first do a lookup using the scope, then try without
+        full_type = make_full_name(prefix, scope)
+        return (
+            prefix in self.basic_types or
+            full_type in self.user_types or
+            prefix in self.user_types)
+
+    def parse_enum(self, parent):
+        name = self.tokens.next()
+        self.expect('{')
+        enum_val = 0
+        vals = []
+        while True:
+            token = self.tokens.next()
+            if token == '}':
+                self.expect(';')
+                break
+            if self.tokens.consume_if('='):
+                enum_val = int(self.tokens.next())
+            vals.append((token, enum_val))
+            enum_val += 1
+            self.tokens.consume_if(',')
+
+        self.user_types.add(name)
+        self.enums.add(name)
+        parent.enums.append(Enum(name, parent, vals))
+
     def parse_struct(self, outer=None):
         name = self.tokens.next()
         parent = None
@@ -158,14 +208,14 @@ class Parser(object):
 
         s = Struct(name, parent, outer)
 
-        USER_TYPES.add(s.full_name)
+        self.user_types.add(s.full_name)
         self.expect('{')
 
         for token in self.tokens:
             if token == 'struct':
                 child = self.parse_struct(outer=s)
                 s.children.append(child)
-            elif valid_type(token, s):
+            elif self.valid_type(token, s):
                 optional = self.tokens.consume_if('?')
                 var_type = token
                 while True:
@@ -179,19 +229,37 @@ class Parser(object):
                         else:
                             count = int(self.tokens.next())
                             self.expect(']')
-                    s.vars.append(Var(
-                        var_name, var_type, optional=optional, count=count))
+                    if var_name in self.enums:
+                        category = 'enum'
+                    elif var_name in self.user_types:
+                        category = 'user'
+                    else:
+                        category = 'basic'
 
                     token = self.tokens.next()
+
+                    default_value = None
+                    if token == '=':
+                        default_value = self.tokens.next()
+                        token = self.tokens.next()
+
+                    s.vars.append(Var(
+                        var_name, var_type, category,
+                        default_value=default_value,
+                        optional=optional, count=count))
+
                     if token == ',':
                         # allow multiple vars of the same type on one line
                         continue
+
                     if token != ';':
                         self.err('Error parsing multiple vars')
                     break
             elif token == '}':
                 self.expect(';')
                 return s
+            elif token == 'enum':
+                self.parse_enum(s)
         return s
 
     def parse_assignment(self):
@@ -216,12 +284,6 @@ class Parser(object):
 
 
 def save_output(p, filename):
-    # doing local imports here just because our decorators rely
-    # on the namespaces being set, and that's done during parsing..
-    from input_parser_binary_hpp import gen_binary_hpp
-    from input_parser_friendly_hpp import (
-        gen_friendly_hpp, gen_serializer, gen_serializer_decl)
-
     path, filename = os.path.split(filename)
     base, ext = os.path.splitext(filename)
 
@@ -230,8 +292,9 @@ def save_output(p, filename):
 
     binary_hpp = os.path.join(OUTPUT_DIR, path, base + '.binary.hpp')
     friendly_hpp = os.path.join(OUTPUT_DIR, path, base + '.friendly.hpp')
-    serialize_hpp = os.path.join(OUTPUT_DIR, path, base + '.serialize.hpp')
-    serialize_cpp = os.path.join(OUTPUT_DIR, path, base + '.serialize.cpp')
+    friendly_cpp = os.path.join(OUTPUT_DIR, path, base + '.friendly.cpp')
+    # serialize_hpp = os.path.join(OUTPUT_DIR, path, base + '.serialize.hpp')
+    # serialize_cpp = os.path.join(OUTPUT_DIR, path, base + '.serialize.cpp')
 
     def format_file(filename, s):
         with open(filename, 'wt') as f:
@@ -245,16 +308,15 @@ def save_output(p, filename):
         with open(filename, 'wt') as f:
             f.write(res)
 
-    format_file(binary_hpp, gen_binary_hpp(p.structs))
+    format_file(binary_hpp, gen_binary_hpp(p.structs, p.user_types))
     format_file(friendly_hpp, gen_friendly_hpp(p.structs))
-    format_file(serialize_hpp, gen_serializer_decl(p.structs))
 
     friendly_path, friendly_filename = os.path.split(friendly_hpp)
     rel_path = os.path.relpath('.', friendly_path)
 
     format_file(
-        serialize_cpp,
-        gen_serializer(p.structs, friendly_filename, rel_path))
+        friendly_cpp,
+        gen_serializer(p.structs, friendly_filename, rel_path, p.basic_types))
 
 parser = argparse.ArgumentParser()
 parser.add_argument('filename')

@@ -1,9 +1,17 @@
 #pragma once
+
+#include "generated/output_format.friendly.hpp"
+
 #define WITH_XFORM_MTX 0
 
 static u32 DEFAULT_MATERIAL = ~0u;
 
 class DeferredWriter;
+
+namespace melange
+{
+  class AlienMaterial;
+}
 
 namespace exporter
 {
@@ -177,7 +185,7 @@ namespace exporter
 
     struct MaterialGroup
     {
-      u32 materialId;
+      melange::AlienMaterial* mat = nullptr;
       u32 startIndex = ~0u;
       u32 numIndices = ~0u;
     };
@@ -188,7 +196,6 @@ namespace exporter
     vector<int> indices;
     vector<MaterialGroup> materialGroups;
     vector<u32> selectedEdges;
-    unordered_map<u32, vector<int>> polysByMaterial;
 
     Sphere boundingSphere;
   };
@@ -222,6 +229,7 @@ namespace exporter
   };
 }
 
+extern scene::Scene g_Scene2;
 extern exporter::Scene g_scene;
 extern exporter::Options options;
 extern vector<function<bool()>> g_deferredFunctions;

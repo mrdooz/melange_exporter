@@ -1,4 +1,10 @@
+#include "exporter_utils.hpp"
 #include "exporter.hpp"
+#include "generated/output_format.friendly.hpp"
+
+IdGenerator g_ObjectId(0);
+IdGenerator g_MaterialId(1);
+unordered_map<int, melange::BaseMaterial*> g_MaterialIdToObj;
 
 //-----------------------------------------------------------------------------
 void CopyTransform(const melange::Matrix& mtx, exporter::Transform* xform)
@@ -6,6 +12,23 @@ void CopyTransform(const melange::Matrix& mtx, exporter::Transform* xform)
   xform->pos = mtx.off;
   xform->rot = melange::MatrixToHPB(mtx, melange::ROTATIONORDER_HPB);
   xform->scale = melange::Vector(Len(mtx.v1), Len(mtx.v2), Len(mtx.v3));
+}
+
+//-----------------------------------------------------------------------------
+template <typename T>
+void CopyVectorToArray(const T& v, float* out)
+{
+  out[0] = v.x;
+  out[1] = v.y;
+  out[2] = v.z;
+}
+
+//-----------------------------------------------------------------------------
+void CopyTransform(const melange::Matrix& mtx, scene::Transform* xform)
+{
+  CopyVectorToArray(mtx.off, xform->pos);
+  CopyVectorToArray(melange::MatrixToHPB(mtx, melange::ROTATIONORDER_HPB), xform->rot);
+  CopyVectorToArray(melange::Vector(Len(mtx.v1), Len(mtx.v2), Len(mtx.v3)), xform->scale);
 }
 
 //-----------------------------------------------------------------------------
