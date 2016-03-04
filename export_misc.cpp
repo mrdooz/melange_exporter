@@ -234,7 +234,7 @@ exporter::BaseObject::BaseObject(melange::BaseObject* melangeObj)
 {
   LOG(1, "Exporting: %s\n", name.c_str());
   melange::BaseObject* melangeParent = melangeObj->GetUp();
-  if ((!!melangeParent) ^ (!!parent))
+  if ((intptr_t)melangeParent ^ (intptr_t)parent)
   {
     LOG(1,
         "  Unable to find parent! (%s)\n",

@@ -1,6 +1,6 @@
 #include "exporter_utils.hpp"
 #include "exporter.hpp"
-#include "generated/output_format.friendly.hpp"
+#include "generated/scene_format.friendly.hpp"
 
 IdGenerator g_ObjectId(0);
 IdGenerator g_MaterialId(1);

@@ -367,6 +367,44 @@ struct FatVertexSupplier
   vector<FatVertex> fatVerts;
 };
 
+//-----------------------------------------------------------------------------
+struct DataStreamHelper
+{
+  DataStreamHelper()
+    : used(0)
+    , size(16*1024)
+  {
+    data.resize(size);
+  }
+
+  template <typename T>
+  void Add(const T& t)
+  {
+    int required = used + sizeof(T);
+    if (required > size)
+    {
+      size = max(required, (int)(size * 1.5));
+      data.resize(size);
+    }
+
+    memcpy(&data[used], &t, sizeof(T));
+    used += sizeof(T);
+  }
+
+  void CopyOut(const string& name, exporter::Mesh* mesh)
+  {
+    mesh->dataStreams.push_back(exporter::Mesh::DataStream());
+    exporter::Mesh::DataStream& s = mesh->dataStreams.back();
+    s.name = name;
+    s.flags = 0;
+    s.data.resize(size);
+    memcpy(s.data.data(), data.data(), size);
+  }
+
+  vector<char> data;
+  int used = 0;
+  int size = 0;
+};
 
 //-----------------------------------------------------------------------------
 static void CollectVertices(melange::PolygonObject* polyObj,
@@ -389,6 +427,8 @@ static void CollectVertices(melange::PolygonObject* polyObj,
   FatVertexSupplier fatVtx(polyObj);
   int startIdx = 0;
 
+  DataStreamHelper indexStream;
+
   // Create the material groups, where each group contains polygons that share the same material
   for (const pair<melange::AlienMaterial*, vector<int>>& kv : polysByMaterial)
   {
@@ -403,17 +443,17 @@ static void CollectVertices(melange::PolygonObject* polyObj,
       int idx1 = fatVtx.AddVertex(polyIdx, 1);
       int idx2 = fatVtx.AddVertex(polyIdx, 2);
 
-      mesh->indices.push_back(idx0);
-      mesh->indices.push_back(idx1);
-      mesh->indices.push_back(idx2);
+      indexStream.Add(idx0);
+      indexStream.Add(idx1);
+      indexStream.Add(idx2);
       startIdx += 3;
 
       if (IsQuad(polys[polyIdx]))
       {
         int idx3 = fatVtx.AddVertex(polyIdx, 3);
-        mesh->indices.push_back(idx0);
-        mesh->indices.push_back(idx2);
-        mesh->indices.push_back(idx3);
+        indexStream.Add(idx0);
+        indexStream.Add(idx2);
+        indexStream.Add(idx3);
         startIdx += 3;
       }
     }
@@ -423,17 +463,28 @@ static void CollectVertices(melange::PolygonObject* polyObj,
 
   // copy the data over from the fat vertices
   int numFatVerts = (int)fatVtx.fatVerts.size();
-  mesh->verts.resize(numFatVerts * 3);
-  mesh->normals.resize(numFatVerts * 3);
-  if (fatVtx.uvHandle)
-    mesh->uv.resize(numFatVerts * 2);
+
+  DataStreamHelper posStream;
+  DataStreamHelper normalStream;
+  DataStreamHelper uvStream;
 
   for (int i = 0; i < numFatVerts; ++i)
   {
-    CopyOutVector3(&mesh->verts[i * 3], fatVtx.fatVerts[i].pos);
-    CopyOutVector3(&mesh->normals[i * 3], fatVtx.fatVerts[i].normal);
+    posStream.Add(fatVtx.fatVerts[i].pos);
+    normalStream.Add(fatVtx.fatVerts[i].normal);
     if (fatVtx.uvHandle)
-      CopyOutVector2(&mesh->normals[i * 2], fatVtx.fatVerts[i].uv);
+    {
+      uvStream.Add(fatVtx.fatVerts[i].uv.x);
+      uvStream.Add(fatVtx.fatVerts[i].uv.y);
+    }
+  }
+
+  indexStream.CopyOut("index32", mesh);
+  posStream.CopyOut("pos", mesh);
+  normalStream.CopyOut("normal", mesh);
+  if (uvStream.size)
+  {
+    uvStream.CopyOut("uv", mesh);
   }
 }
 

@@ -10,6 +10,13 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		Performance1.psess = Performance1.psess
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "generated", "generated", "{EC399DC4-47FD-4033-A047-58901F1D5CFA}"
+	ProjectSection(SolutionItems) = preProject
+		..\generated\scene_format.binary.hpp = ..\generated\scene_format.binary.hpp
+		..\generated\scene_format.friendly.cpp = ..\generated\scene_format.friendly.cpp
+		..\generated\scene_format.friendly.hpp = ..\generated\scene_format.friendly.hpp
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -29,5 +36,8 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{EC399DC4-47FD-4033-A047-58901F1D5CFA} = {C4D967DB-09EC-46F8-A66B-C9650A0EE3F2}
 	EndGlobalSection
 EndGlobal

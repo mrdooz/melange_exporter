@@ -9,29 +9,6 @@ namespace protocol
 {
 #pragma pack(push, 1)
 
-#define BIT(n) (1 << (n))
-
-  // clang-format off
-  enum VertexFormat2 : u16
-  {
-    VFORMAT2_POS = 0x1,
-    VFORMAT2_POS_XY = 0x2,
-    VFORMAT2_NORMAL = 0x3,
-    VFORMAT2_TANGENT = 0x4,
-    VFORMAT2_BINORMAL = 0x5,
-    VFORMAT2_TEX2 = 0x6,
-    VFORMAT2_TEX3 = 0x7,
-    VFORMAT2_COLOR = 0x8,
-    VFORMAT2_COLOR_U32 = 0x9,
-  };
-
-  enum VertexFlags2 : u16
-  {
-    VFLAG2_NONE = 0,
-    VFLAG2_COMPRESSED = BIT(0),
-  };
-  // clang-format on
-
   enum
   {
     INVALID_OBJECT_ID = 0xffffffff
@@ -101,9 +78,14 @@ namespace protocol
     {
       const char* name;
       u32 flags;
-      u32 numElems;
-      u32 elemSize;
+      u32 dataSize;
       void* data;
+    };
+
+    struct DataStreamArray
+    {
+      int numElems;
+      DataStream* elems;
     };
 
     struct MaterialGroup
@@ -118,17 +100,7 @@ namespace protocol
     u32 numMaterialGroups;
     MaterialGroup* materialGroups;
 
-    u32 numStreams;
-    DataStream* streams;
-
-#if BOBA_PROTOCOL_VERSION < 5
-    u32* vertexFormat;
-    float* vertexData;
-    u32* indices;
-
-    u32 numSelectedEdges;
-    u32* selectedEdges;
-#endif
+    DataStreamArray* streams;
 
     // bounding sphere
     float sx, sy, sz, r;

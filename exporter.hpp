@@ -1,6 +1,6 @@
 #pragma once
 
-#include "generated/output_format.friendly.hpp"
+#include "generated/scene_format.friendly.hpp"
 
 #define WITH_XFORM_MTX 0
 
@@ -190,10 +190,19 @@ namespace exporter
       u32 numIndices = ~0u;
     };
 
-    vector<float> verts;
-    vector<float> normals;
-    vector<float> uv;
-    vector<int> indices;
+    struct DataStream
+    {
+      string name;
+      u32 flags = 0;
+      vector<char> data;
+    };
+
+    vector<DataStream> dataStreams;
+
+    //vector<float> verts;
+    //vector<float> normals;
+    //vector<float> uv;
+    //vector<int> indices;
     vector<MaterialGroup> materialGroups;
     vector<u32> selectedEdges;
 

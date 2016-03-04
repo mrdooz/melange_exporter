@@ -176,32 +176,7 @@ namespace exporter
 #endif
   }
 
-  struct VertexFormat
-  {
-    void Add(protocol::VertexFormat2 fmt, protocol::VertexFlags2 flags)
-    {
-      bytes.push_back(((u32)flags << 16) + (u32)fmt);
-    }
-
-    void End()
-    {
-      bytes.push_back(0);
-    }
-
-    bool HasFormat(protocol::VertexFormat2 fmt)
-    {
-      for (u32 b : bytes)
-      {
-        if ((b & 0xffff) == fmt)
-          return true;
-      }
-
-      return false;
-    }
-
-    vector<u32> bytes;
-  };
-
+#if 0
   //------------------------------------------------------------------------------
   void SaveCompressedVertices(Mesh* mesh, const Options& options, DeferredWriter& writer)
   {
@@ -273,74 +248,44 @@ namespace exporter
       32);
     mesh->indices.swap(optimizedIndices);
   }
-
+#endif
   //------------------------------------------------------------------------------
   void SaveMesh(Mesh* mesh, const Options& options, DeferredWriter& writer)
   {
-    bool useCompression = false;
-    bool optimizeFaces = false;
-
-    // Compression stats:
-    // org: 2,030,104 crystals_flat.boba
-    // compressed indices: 1,712,177 crystals_flat.boba
-    // compressed indices + compressed normals: 1,213,649 crystals_flat.boba
     SaveBase(mesh, options, writer);
-
-    // Note, divide by 3 here to write # verts, and not # floats
-    writer.Write((u32)mesh->verts.size() / 3);
-    writer.Write((u32)mesh->indices.size());
 
     // write the material groups
     writer.Write((u32)mesh->materialGroups.size());
     writer.AddDeferredVector(mesh->materialGroups);
 
-    vector<float> vertexData;
-    VertexFormat fmt;
-    if (mesh->verts.size())
-    {
-      fmt.Add(protocol::VFORMAT2_POS, protocol::VFLAG2_NONE);
-      copy(mesh->verts.begin(), mesh->verts.end(), back_inserter(vertexData));
-    }
-
-    if (mesh->normals.size())
-    {
-      fmt.Add(protocol::VFORMAT2_NORMAL, protocol::VFLAG2_NONE);
-      copy(mesh->normals.begin(), mesh->normals.end(), back_inserter(vertexData));
-    }
-
-    // Don't save UVs if using the default material
-    if (mesh->uv.size() && mesh->materialGroups.size() == 1
-      && !mesh->materialGroups[0].mat)
-    {
-      fmt.Add(protocol::VFORMAT2_TEX2, protocol::VFLAG2_NONE);
-      copy(mesh->uv.begin(), mesh->uv.end(), back_inserter(vertexData));
-    }
-
-    fmt.End();
-
-    writer.AddDeferredVector(fmt.bytes);
-
-    if (useCompression)
-    {
-      SaveCompressedVertices(mesh, options, writer);
-    }
-    else
-    {
-      writer.AddDeferredVector(vertexData);
-
-      if (optimizeFaces)
-      {
-        OptimizeFaces(mesh);
-      }
-
-      writer.AddDeferredVector(mesh->indices);
-    }
-
-    writer.Write((int)mesh->selectedEdges.size());
-    writer.AddDeferredVector(mesh->selectedEdges);
+    // write the data streams fixup. this is essentially saving a pointer
+    // to an array of pointers :)
+    int streamFixup = writer.CreateFixup();
 
     // save bounding volume
     writer.Write(mesh->boundingSphere);
+
+    // write the data streams.
+    // first # streams, then the actual streams
+    writer.InsertFixup(streamFixup);
+    int numStreams = (int)mesh->dataStreams.size();
+    writer.Write(numStreams);
+    vector<int> fixups;
+    for (int i = 0; i < numStreams; ++i)
+    {
+      fixups.push_back(writer.CreateFixup());
+    }
+
+    for (int i = 0; i < numStreams; ++i)
+    {
+      writer.InsertFixup(fixups[i]);
+      exporter::Mesh::DataStream& d = mesh->dataStreams[i];
+
+      writer.AddDeferredString(d.name);
+      writer.Write(d.flags);
+      writer.Write((int)d.data.size());
+      writer.AddDeferredVector(d.data);
+    }
   }
 
   //------------------------------------------------------------------------------
