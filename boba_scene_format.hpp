@@ -80,6 +80,7 @@ namespace protocol
       u32 flags;
       u32 dataSize;
       void* data;
+
     };
 
     struct DataStreamArray
@@ -95,15 +96,17 @@ namespace protocol
       u32 numIndices;
     };
 
-    u32 numVerts;
-    u32 numIndices;
-    u32 numMaterialGroups;
-    MaterialGroup* materialGroups;
-
-    DataStreamArray* streams;
+    struct MaterialGroupArray
+    {
+      int numElems;
+      MaterialGroup* elems;
+    };
 
     // bounding sphere
     float sx, sy, sz, r;
+
+    MaterialGroupArray* materialGroups;
+    DataStreamArray* streams;
   };
 
   struct NullObjectBlob : public BlobBase

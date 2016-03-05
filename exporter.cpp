@@ -274,5 +274,11 @@ int main(int argc, char** argv)
   if (options.logfile)
     fclose(options.logfile);
 
+  if (IsDebuggerPresent())
+  {
+    while (!GetAsyncKeyState(VK_ESCAPE))
+      continue;
+  }
+
   return 0;
 }

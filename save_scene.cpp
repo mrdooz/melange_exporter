@@ -11,6 +11,15 @@
 namespace exporter
 {
   //------------------------------------------------------------------------------
+  static vector<int> CreateFixupRange(int count, DeferredWriter& w)
+  {
+    vector<int> res;
+    for (int i = 0; i < count; ++i)
+      res.push_back(w.CreateFixup());
+    return res;
+  }
+
+  //------------------------------------------------------------------------------
   struct ScopedStats
   {
     ScopedStats(const DeferredWriter& writer, int* val) : writer(writer), val(val)
@@ -56,8 +65,11 @@ namespace exporter
     ScopedStats s(writer, &stats->meshSize);
     header.numMeshes = (u32)scene.meshes.size();
     header.meshDataStart = header.numMeshes ? (u32)writer.GetFilePos() : 0;
-    for (Mesh* mesh : scene.meshes)
+    vector<int> fixups = CreateFixupRange(header.numMeshes, writer);
+    for (int i = 0; i < (int)scene.meshes.size(); ++i)
     {
+      Mesh* mesh = scene.meshes[i];
+      writer.InsertFixup(fixups[i]);
       SaveMesh(mesh, options, writer);
     }
   }
@@ -249,36 +261,43 @@ namespace exporter
     mesh->indices.swap(optimizedIndices);
   }
 #endif
+
   //------------------------------------------------------------------------------
   void SaveMesh(Mesh* mesh, const Options& options, DeferredWriter& writer)
   {
     SaveBase(mesh, options, writer);
 
-    // write the material groups
-    writer.Write((u32)mesh->materialGroups.size());
-    writer.AddDeferredVector(mesh->materialGroups);
+    // save bounding volume
+    writer.Write(mesh->boundingSphere);
+
+    int materialGroupFixup = writer.CreateFixup();
 
     // write the data streams fixup. this is essentially saving a pointer
     // to an array of pointers :)
     int streamFixup = writer.CreateFixup();
 
-    // save bounding volume
-    writer.Write(mesh->boundingSphere);
+    // write material groups
+    writer.InsertFixup(materialGroupFixup);
+    int numMaterialGroups = (int)mesh->materialGroups.size();
+    writer.Write(numMaterialGroups);
+    vector<int> mgFixups = CreateFixupRange(numMaterialGroups, writer);
+
+    for (int i = 0; i < numMaterialGroups; ++i)
+    {
+      writer.InsertFixup(mgFixups[i]);
+      writer.Write(mesh->materialGroups[i]);
+    }
 
     // write the data streams.
     // first # streams, then the actual streams
     writer.InsertFixup(streamFixup);
     int numStreams = (int)mesh->dataStreams.size();
     writer.Write(numStreams);
-    vector<int> fixups;
-    for (int i = 0; i < numStreams; ++i)
-    {
-      fixups.push_back(writer.CreateFixup());
-    }
+    vector<int> streamFixups = CreateFixupRange(numStreams, writer);
 
     for (int i = 0; i < numStreams; ++i)
     {
-      writer.InsertFixup(fixups[i]);
+      writer.InsertFixup(streamFixups[i]);
       exporter::Mesh::DataStream& d = mesh->dataStreams[i];
 
       writer.AddDeferredString(d.name);

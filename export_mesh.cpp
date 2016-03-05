@@ -161,9 +161,9 @@ struct FatVertex
     memset(this, 0, sizeof(FatVertex));
   }
 
-  melange::Vector pos = melange::Vector(0,0,0);
-  melange::Vector normal = melange::Vector(0,0,0);
-  melange::Vector uv = melange::Vector(0,0,0);
+  melange::Vector32 pos = melange::Vector32(0,0,0);
+  melange::Vector32 normal = melange::Vector32(0,0,0);
+  melange::Vector32 uv = melange::Vector32(0,0,0);
 
   u32 GetHash() const
   {
@@ -308,7 +308,7 @@ struct FatVertexSupplier
     const melange::CPolygon& poly = polys[polyIdx];
 
     FatVertex vtx;
-    vtx.pos = verts[AlphabetIndex<int>(poly, vertIdx)];
+    vtx.pos = Vector3Coerce<melange::Vector32>(verts[AlphabetIndex<int>(poly, vertIdx)]);
 
     if (hasNormals)
     {
@@ -316,11 +316,11 @@ struct FatVertexSupplier
       {
         melange::NormalStruct normal;
         normals->Get(normalHandle, polyIdx, normal);
-        vtx.normal = AlphabetIndex<melange::Vector>(normal, vertIdx);
+        vtx.normal = Vector3Coerce<melange::Vector32>(AlphabetIndex<melange::Vector>(normal, vertIdx));
       }
       else if (hasPhongTag)
       {
-        vtx.normal = Vector3Coerce<melange::Vector>(phongNormals[polyIdx*4+vertIdx]);
+        vtx.normal = phongNormals[polyIdx*4+vertIdx];
       }
     }
     else
@@ -329,14 +329,14 @@ struct FatVertexSupplier
       int idx0 = AlphabetIndex<int>(poly, 0);
       int idx1 = AlphabetIndex<int>(poly, 1);
       int idx2 = AlphabetIndex<int>(poly, 2);
-      vtx.normal = CalcNormal(verts[idx0], verts[idx1], verts[idx2]);
+      vtx.normal = Vector3Coerce<melange::Vector32>(CalcNormal(verts[idx0], verts[idx1], verts[idx2]));
     }
 
     if (uvHandle)
     {
       melange::UVWStruct s;
       melange::UVWTag::Get(uvHandle, polyIdx, s);
-      vtx.uv = AlphabetIndex<melange::Vector>(s, vertIdx);
+      vtx.uv = Vector3Coerce<melange::Vector32>(AlphabetIndex<melange::Vector>(s, vertIdx));
     }
 
     // Check if the fat vertex already exists
@@ -383,7 +383,7 @@ struct DataStreamHelper
     int required = used + sizeof(T);
     if (required > size)
     {
-      size = max(required, (int)(size * 1.5));
+      size = max(required, (int)size) * 1.5;
       data.resize(size);
     }
 
@@ -397,8 +397,8 @@ struct DataStreamHelper
     exporter::Mesh::DataStream& s = mesh->dataStreams.back();
     s.name = name;
     s.flags = 0;
-    s.data.resize(size);
-    memcpy(s.data.data(), data.data(), size);
+    s.data.resize(used);
+    memcpy(s.data.data(), data.data(), used);
   }
 
   vector<char> data;
