@@ -1,12 +1,12 @@
 #pragma once
 
+// This is the actual binary format saved on disk
+namespace protocol
+{
 #ifndef BOBA_PROTOCOL_VERSION
 #define BOBA_PROTOCOL_VERSION 5
 #endif
 
-// This is the actual binary format saved on disk
-namespace protocol
-{
 #pragma pack(push, 1)
 
   enum
@@ -80,7 +80,6 @@ namespace protocol
       u32 flags;
       u32 dataSize;
       void* data;
-
     };
 
     struct DataStreamArray
@@ -141,25 +140,29 @@ namespace protocol
     int type;
     u32 numPoints;
     float* points;
-    bool isCLosed;
+    bool isClosed;
   };
 
   struct MaterialBlob
   {
     struct MaterialComponent
     {
+      const char* name;
       float r, g, b, a;
       const char* texture;
       float brightness;
     };
 
+    struct MaterialComponentArray
+    {
+      int numElems;
+      MaterialComponent* elems;
+    };
+
     u32 blobSize;
     const char* name;
     u32 materialId;
-    u32 flags;
-    MaterialComponent* color;
-    MaterialComponent* luminance;
-    MaterialComponent* reflection;
+    MaterialComponentArray* components;
   };
 #pragma pack(pop)
 

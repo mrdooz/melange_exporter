@@ -134,39 +134,25 @@ namespace exporter
 
     writer.AddDeferredString(material->name);
     writer.Write(material->id);
-    writer.Write(material->flags);
 
-    u32 colorFixup =
-      (material->flags & Material::FLAG_COLOR) ? writer.CreateFixup() : protocol::INVALID_OBJECT_ID;
+    int componentFixup = writer.CreateFixup();
 
-    u32 luminanceFixup = (material->flags & Material::FLAG_LUMINANCE) ? writer.CreateFixup()
-      : protocol::INVALID_OBJECT_ID;
+    // write the components
+    // first # components, then the actual components
+    writer.InsertFixup(componentFixup);
+    int numComponents = (int)material->components.size();
+    writer.Write(numComponents);
+    vector<int> componentFixups = CreateFixupRange(numComponents, writer);
 
-    u32 reflectionFixup = (material->flags & Material::FLAG_REFLECTION) ? writer.CreateFixup()
-      : protocol::INVALID_OBJECT_ID;
-
-    if (material->flags & Material::FLAG_COLOR)
+    for (int i = 0; i < numComponents; ++i)
     {
-      writer.InsertFixup(colorFixup);
-      writer.Write(material->color.color);
-      writer.AddDeferredString(material->color.texture);
-      writer.Write(material->color.brightness);
-    }
+      writer.InsertFixup(componentFixups[i]);
+      const exporter::MaterialComponent& c = material->components[i];
 
-    if (material->flags & Material::FLAG_LUMINANCE)
-    {
-      writer.InsertFixup(luminanceFixup);
-      writer.Write(material->luminance.color);
-      writer.AddDeferredString(material->luminance.texture);
-      writer.Write(material->luminance.brightness);
-    }
-
-    if (material->flags & Material::FLAG_REFLECTION)
-    {
-      writer.InsertFixup(reflectionFixup);
-      writer.Write(material->reflection.color);
-      writer.AddDeferredString(material->reflection.texture);
-      writer.Write(material->reflection.brightness);
+      writer.AddDeferredString(c.name);
+      writer.Write(c.color);
+      writer.AddDeferredString(c.texture);
+      writer.Write(c.brightness);
     }
 
     writer.EndBlockMarker();

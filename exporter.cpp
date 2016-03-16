@@ -78,6 +78,18 @@ exporter::BaseObject* exporter::Scene::FindObject(melange::BaseObject* obj)
 }
 
 //-----------------------------------------------------------------------------
+exporter::Material* exporter::Scene::FindMaterial(melange::BaseMaterial* mat)
+{
+  for (Material* m : materials)
+  {
+    if (m->mat == mat)
+      return m;
+  }
+
+  return nullptr;
+}
+
+//-----------------------------------------------------------------------------
 void ExportAnimations()
 {
   melange::GeData mydata;

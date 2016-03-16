@@ -132,9 +132,9 @@ void CollectMaterials(melange::AlienBaseDocument* c4dDoc)
   exporterMaterial->mat = nullptr;
   exporterMaterial->name = "<default>";
   exporterMaterial->id = ~0u;
-  exporterMaterial->flags = exporter::Material::FLAG_COLOR;
-  exporterMaterial->color.brightness = 1.f;
-  exporterMaterial->color.color = exporter::Color(0.5f, 0.5f, 0.5f);
+
+  exporterMaterial->components.push_back(
+      exporter::MaterialComponent{"color", exporter::Color(0.5f, 0.5f, 0.5f), "", 1});
 
   for (melange::BaseMaterial* mat = c4dDoc->GetFirstMaterial(); mat; mat = mat->GetNext())
   {
@@ -152,19 +152,26 @@ void CollectMaterials(melange::AlienBaseDocument* c4dDoc)
     // check if the given channel is used in the material
     if (((melange::Material*)mat)->GetChannelState(CHANNEL_COLOR))
     {
-      exporterMaterial->flags |= exporter::Material::FLAG_COLOR;
-      exporterMaterial->color.brightness = GetFloatParam(mat, melange::MATERIAL_COLOR_BRIGHTNESS);
-      exporterMaterial->color.color =
-          GetVectorParam<exporter::Color>(mat, melange::MATERIAL_COLOR_COLOR);
+      exporterMaterial->components.push_back(exporter::MaterialComponent{"color",
+          GetVectorParam<exporter::Color>(mat, melange::MATERIAL_COLOR_COLOR),
+          "",
+          GetFloatParam(mat, melange::MATERIAL_COLOR_BRIGHTNESS)});
     }
 
     if (((melange::Material*)mat)->GetChannelState(CHANNEL_REFLECTION))
     {
-      exporterMaterial->flags |= exporter::Material::FLAG_REFLECTION;
-      exporterMaterial->reflection.brightness =
-          GetFloatParam(mat, melange::MATERIAL_REFLECTION_BRIGHTNESS);
-      exporterMaterial->reflection.color =
-          GetVectorParam<exporter::Color>(mat, melange::MATERIAL_REFLECTION_COLOR);
+      exporterMaterial->components.push_back(exporter::MaterialComponent{"refl",
+          GetVectorParam<exporter::Color>(mat, melange::MATERIAL_REFLECTION_COLOR),
+          "",
+          GetFloatParam(mat, melange::MATERIAL_REFLECTION_BRIGHTNESS)});
+    }
+
+    if (((melange::Material*)mat)->GetChannelState(CHANNEL_LUMINANCE))
+    {
+      exporterMaterial->components.push_back(exporter::MaterialComponent{"lumi",
+          GetVectorParam<exporter::Color>(mat, melange::MATERIAL_LUMINANCE_COLOR),
+          "",
+          GetFloatParam(mat, melange::MATERIAL_LUMINANCE_BRIGHTNESS)});
     }
   }
 }

@@ -140,6 +140,7 @@ namespace exporter
   //------------------------------------------------------------------------------
   struct MaterialComponent
   {
+    string name;
     Color color;
     string texture;
     float brightness;
@@ -148,23 +149,13 @@ namespace exporter
   //------------------------------------------------------------------------------
   struct Material
   {
-    enum Flags
-    {
-      FLAG_COLOR = 1 << 0,
-      FLAG_LUMINANCE = 1 << 1,
-      FLAG_REFLECTION = 1 << 2,
-    };
-
-    Material() : flags(0), mat(nullptr), id(nextId++) {}
+    Material() : mat(nullptr), id(nextId++) {}
 
     string name;
-    u32 flags;
     melange::BaseMaterial* mat;
     u32 id;
 
-    MaterialComponent color;
-    MaterialComponent luminance;
-    MaterialComponent reflection;
+    vector<MaterialComponent> components;
 
     static u32 nextId;
   };
@@ -185,7 +176,7 @@ namespace exporter
 
     struct MaterialGroup
     {
-      melange::AlienMaterial* mat = nullptr;
+      int materialId;
       u32 startIndex = ~0u;
       u32 numIndices = ~0u;
     };
@@ -199,10 +190,6 @@ namespace exporter
 
     vector<DataStream> dataStreams;
 
-    //vector<float> verts;
-    //vector<float> normals;
-    //vector<float> uv;
-    //vector<int> indices;
     vector<MaterialGroup> materialGroups;
     vector<u32> selectedEdges;
 
@@ -226,6 +213,7 @@ namespace exporter
   struct Scene
   {
     BaseObject* FindObject(melange::BaseObject* obj);
+    Material* FindMaterial(melange::BaseMaterial* mat);
     vector<Mesh*> meshes;
     vector<Camera*> cameras;
     vector<NullObject*> nullObjects;

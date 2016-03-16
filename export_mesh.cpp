@@ -433,7 +433,8 @@ static void CollectVertices(melange::PolygonObject* polyObj,
   for (const pair<melange::AlienMaterial*, vector<int>>& kv : polysByMaterial)
   {
     exporter::Mesh::MaterialGroup mg;
-    mg.mat = kv.first;
+    exporter::Material* mat = g_scene.FindMaterial(kv.first);
+    mg.materialId = mat ? mat->id : ~0;
     mg.startIndex = startIdx;
 
     // iterate over all the polygons in the material group, and collect the vertices
